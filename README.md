@@ -6,7 +6,7 @@ PDF processing pipeline that extracts and structures drawing information using P
 
 - Processes multiple drawing types (Architectural, Electrical, etc.)
 - Extracts text and tables from PDFs using PyMuPDF
-- Structures data using GPT-4
+- Structures data using GPT-4o-mini
 - Handles batch processing with rate limiting
 - Generates room templates for architectural drawings
 - Comprehensive logging and error handling
