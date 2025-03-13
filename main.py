@@ -1,10 +1,13 @@
+"""
+Main application entry point.
+"""
 import os
 import sys
 import asyncio
 import logging
 
 from openai import AsyncOpenAI
-from config.settings import OPENAI_API_KEY
+from config.settings import OPENAI_API_KEY, get_all_settings
 from utils.logging_utils import setup_logging
 from processing.job_processor import process_job_site_async
 
@@ -24,6 +27,7 @@ if __name__ == "__main__":
     setup_logging(output_folder)
     logging.info(f"Processing files from: {job_folder}")
     logging.info(f"Output will be saved to: {output_folder}")
+    logging.info(f"Application settings: {get_all_settings()}")
     
     # 2) Create OpenAI Client
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)

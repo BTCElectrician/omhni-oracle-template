@@ -38,7 +38,7 @@ attrs~=24.3.0
 # Utilities
 python-dotenv~=1.0.1
 tqdm~=4.66.5
-tenacity~=8.2.3  # For enhanced retry patterns
+tenacity~=9.0.0  # For enhanced retry patterns
 pillow~=10.4.0
 
 # Security and crypto

@@ -1,3 +1,7 @@
+"""
+PDF processing utilities that directly use PyMuPDF.
+This module is being phased out in favor of the extraction service.
+"""
 import pymupdf as fitz
 import logging
 import aiofiles
@@ -9,16 +13,13 @@ logger = logging.getLogger(__name__)
 async def extract_text(file_path: str) -> str:
     """
     Extract text from a PDF file using PyMuPDF.
+    Consider using the extraction service instead.
     
     Args:
         file_path: Path to the PDF file
         
     Returns:
-        Extracted text content
-        
-    Raises:
-        FileNotFoundError: If the file does not exist
-        Exception: For any other errors during extraction
+        Extracted text
     """
     logger.info(f"Starting text extraction for {file_path}")
     if not os.path.exists(file_path):
@@ -50,16 +51,13 @@ async def extract_text(file_path: str) -> str:
 async def extract_images(file_path: str) -> List[Dict[str, Any]]:
     """
     Extract images from a PDF file using PyMuPDF.
+    Consider using the extraction service instead.
     
     Args:
         file_path: Path to the PDF file
         
     Returns:
-        List of dictionaries containing image information
-        
-    Raises:
-        FileNotFoundError: If the file does not exist
-        Exception: For any other errors during extraction
+        List of image metadata dictionaries
     """
     if not os.path.exists(file_path):
         logger.error(f"File not found: {file_path}")
@@ -74,26 +72,16 @@ async def extract_images(file_path: str) -> List[Dict[str, Any]]:
                     xref = img[0]
                     base_image = doc.extract_image(xref)
                     
-                    # Get transformation matrix and image rectangle
-                    # This gives us more precise positioning information
-                    image_rect = None
-                    for img_info in page.get_image_info():
-                        if img_info["xref"] == xref:
-                            image_rect = img_info["bbox"]
-                            break
-                    
-                    bbox = image_rect if image_rect else (0, 0, base_image["width"], base_image["height"])
+                    # PyMuPDF doesn't directly provide bounding box for images
+                    # We'd need to process rect information from the page
+                    # For compatibility, we'll create a similar structure to pdfplumber
                     
                     images.append({
                         'page': page_index + 1,
-                        'index': img_index,
-                        'bbox': bbox,
+                        'bbox': (0, 0, base_image["width"], base_image["height"]),  # Placeholder bbox
                         'width': base_image["width"],
                         'height': base_image["height"],
-                        'type': base_image["ext"],  # Image extension/type
-                        'colorspace': base_image.get("colorspace", ""),
-                        'xres': base_image.get("xres", 0),
-                        'yres': base_image.get("yres", 0)
+                        'type': base_image["ext"]  # Image extension/type
                     })
         
         logger.info(f"Extracted {len(images)} images from {file_path}")
@@ -105,16 +93,13 @@ async def extract_images(file_path: str) -> List[Dict[str, Any]]:
 async def get_pdf_metadata(file_path: str) -> Dict[str, Any]:
     """
     Get metadata from a PDF file using PyMuPDF.
+    Consider using the extraction service instead.
     
     Args:
         file_path: Path to the PDF file
         
     Returns:
-        Dictionary containing PDF metadata
-        
-    Raises:
-        FileNotFoundError: If the file does not exist
-        Exception: For any other errors during extraction
+        PDF metadata dictionary
     """
     if not os.path.exists(file_path):
         logger.error(f"File not found: {file_path}")
@@ -122,20 +107,15 @@ async def get_pdf_metadata(file_path: str) -> Dict[str, Any]:
         
     try:
         with fitz.open(file_path) as doc:
-            # Enhanced metadata extraction with more fields
+            # Convert PyMuPDF metadata format to match pdfplumber's format
             metadata = {
                 "title": doc.metadata.get("title", ""),
                 "author": doc.metadata.get("author", ""),
                 "subject": doc.metadata.get("subject", ""),
-                "keywords": doc.metadata.get("keywords", ""),
                 "creator": doc.metadata.get("creator", ""),
                 "producer": doc.metadata.get("producer", ""),
                 "creationDate": doc.metadata.get("creationDate", ""),
-                "modDate": doc.metadata.get("modDate", ""),
-                "format": "PDF " + doc.metadata.get("format", ""),
-                "pageCount": len(doc),
-                "encrypted": doc.is_encrypted,
-                "fileSize": os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                "modDate": doc.metadata.get("modDate", "")
             }
         logger.info(f"Successfully extracted metadata from {file_path}")
         return metadata

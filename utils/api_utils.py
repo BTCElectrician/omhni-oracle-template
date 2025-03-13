@@ -1,13 +1,32 @@
+"""
+API utilities for making safe API calls.
+"""
 import asyncio
 import logging
 import random
+from typing import Dict, Any
+
+from services.ai_service import AiRateLimitError, AiConnectionError, AiResponseError
 
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
-async def async_safe_api_call(client, *args, **kwargs):
+
+async def async_safe_api_call(client, *args, **kwargs) -> Dict[str, Any]:
     """
     Safely call the OpenAI API with retries and backoff.
+    This is a legacy function. Consider using the AI service instead.
+    
+    Args:
+        client: OpenAI client
+        *args: Positional arguments for the API call
+        **kwargs: Keyword arguments for the API call
+        
+    Returns:
+        API response
+        
+    Raises:
+        Exception: If the API call fails after maximum retries
     """
     retries = 0
     delay = 1  # initial backoff

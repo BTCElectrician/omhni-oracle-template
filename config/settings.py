@@ -1,5 +1,9 @@
+"""
+Application settings loaded from environment variables.
+"""
 import os
 from dotenv import load_dotenv
+from typing import Dict, Any, Optional
 
 # Load environment variables from .env file
 load_dotenv()
@@ -19,3 +23,24 @@ TIME_WINDOW = int(os.getenv('TIME_WINDOW', '60'))
 
 # Template Configuration
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
+
+# Additional configuration settings
+DEBUG_MODE = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
+
+# Function to get all settings as a dictionary
+def get_all_settings() -> Dict[str, Any]:
+    """
+    Get all settings as a dictionary.
+    
+    Returns:
+        Dictionary of all settings
+    """
+    return {
+        "OPENAI_API_KEY": "***REDACTED***" if OPENAI_API_KEY else None,
+        "LOG_LEVEL": LOG_LEVEL,
+        "BATCH_SIZE": BATCH_SIZE,
+        "API_RATE_LIMIT": API_RATE_LIMIT,
+        "TIME_WINDOW": TIME_WINDOW,
+        "TEMPLATE_DIR": TEMPLATE_DIR,
+        "DEBUG_MODE": DEBUG_MODE
+    }
