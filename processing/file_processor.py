@@ -8,10 +8,11 @@ from tqdm.asyncio import tqdm
 from dotenv import load_dotenv
 from typing import Dict, Any, Optional
 
-from services.extraction_service import PyMuPdfExtractor
+from services.extraction_service import create_extractor
 from services.ai_service import DrawingAiService, ModelType
 from services.storage_service import FileSystemStorage
 from utils.drawing_processor import DRAWING_INSTRUCTIONS, process_drawing
+from utils.performance_utils import time_operation
 from templates.room_templates import process_architectural_drawing
 
 # Load environment variables
@@ -47,6 +48,7 @@ def is_panel_schedule(file_name: str, raw_content: str) -> bool:
     return any(keyword in file_name_lower for keyword in panel_keywords)
 
 
+@time_operation("total_processing")
 async def process_pdf_async(
     pdf_path: str,
     client,
@@ -56,7 +58,7 @@ async def process_pdf_async(
 ) -> Dict[str, Any]:
     """
     Process a single PDF asynchronously:
-    1) Extract text/tables with PyMuPDF
+    1) Extract text/tables with appropriate extractor based on drawing type
     2) Use GPT to parse/structure the content
     3) Save JSON output
     
@@ -77,8 +79,8 @@ async def process_pdf_async(
         try:
             pbar.update(10)  # Start
             
-            # Initialize services
-            extractor = PyMuPdfExtractor(logger)
+            # Initialize services - use specialized extractor for drawing type
+            extractor = create_extractor(drawing_type, logger)
             storage = FileSystemStorage(logger)
             ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS, logger)
             
@@ -97,13 +99,12 @@ async def process_pdf_async(
             
             pbar.update(20)  # PDF text/tables extracted
             
-            # Process with AI
-            ai_response = await ai_service.process_drawing(
+            # Process with AI - pass the file_name to help with parameter optimization
+            structured_json = await process_drawing(
                 raw_content=raw_content,
                 drawing_type=drawing_type,
-                temperature=0.2,
-                max_tokens=16000,
-                model_type=ModelType.GPT_4O_MINI
+                client=client,
+                file_name=file_name
             )
             
             pbar.update(40)  # GPT processing done
@@ -112,45 +113,43 @@ async def process_pdf_async(
             type_folder = os.path.join(output_folder, drawing_type)
             os.makedirs(type_folder, exist_ok=True)
             
-            # Handle AI response
-            if ai_response.success and ai_response.parsed_content:
+            # Handle the structured JSON response
+            try:
+                # Parse the JSON to validate it
+                parsed_json = json.loads(structured_json)
+                
                 output_filename = os.path.splitext(file_name)[0] + '_structured.json'
                 output_path = os.path.join(type_folder, output_filename)
                 
                 # Save the structured JSON
-                await storage.save_json(ai_response.parsed_content, output_path)
+                await storage.save_json(parsed_json, output_path)
                 
                 pbar.update(20)  # JSON saved
                 logger.info(f"Successfully processed and saved: {output_path}")
                 
                 # If Architectural, generate room templates
                 if drawing_type == 'Architectural':
-                    result = process_architectural_drawing(ai_response.parsed_content, pdf_path, type_folder)
+                    result = process_architectural_drawing(parsed_json, pdf_path, type_folder)
                     templates_created['floor_plan'] = True
                     logger.info(f"Created room templates: {result}")
                 
                 pbar.update(10)  # Finishing
                 return {"success": True, "file": output_path, "panel_schedule": False}
                 
-            else:
+            except json.JSONDecodeError as e:
                 pbar.update(100)
-                error_message = ai_response.error or "Unknown AI processing error"
-                logger.error(f"AI processing error for {pdf_path}: {error_message}")
+                logger.error(f"JSON parsing error for {pdf_path}: {str(e)}")
+                logger.error(f"Raw response: {structured_json[:200]}...")
                 
                 # Save the raw response for debugging
                 raw_output_filename = os.path.splitext(file_name)[0] + '_raw_response.json'
                 raw_output_path = os.path.join(type_folder, raw_output_filename)
                 
-                await storage.save_text(ai_response.content, raw_output_path)
+                await storage.save_text(structured_json, raw_output_path)
                 
                 logger.warning(f"Saved raw API response to {raw_output_path}")
-                return {"success": False, "error": error_message, "file": pdf_path}
+                return {"success": False, "error": f"Failed to parse JSON: {str(e)}", "file": pdf_path}
         
-        except json.JSONDecodeError as e:
-            pbar.update(100)
-            logger.error(f"JSON parsing error for {pdf_path}: {str(e)}")
-            return {"success": False, "error": f"Failed to parse JSON: {str(e)}", "file": pdf_path}
-            
         except Exception as e:
             pbar.update(100)
             logger.error(f"Error processing {pdf_path}: {str(e)}")

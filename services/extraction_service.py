@@ -8,6 +8,8 @@ import asyncio
 
 import pymupdf as fitz
 
+from utils.performance_utils import time_operation
+
 
 class ExtractionResult:
     """
@@ -74,6 +76,7 @@ class PyMuPdfExtractor(PdfExtractor):
     def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger(__name__)
 
+    @time_operation("extraction")
     async def extract(self, file_path: str) -> ExtractionResult:
         """
         Extract text and tables from a PDF file using PyMuPDF.
@@ -192,4 +195,193 @@ class PyMuPdfExtractor(PdfExtractor):
                 except Exception as e:
                     self.logger.warning(f"Error finding tables on page {i+1}: {str(e)}")
             
-            return raw_text, tables, metadata 
+            return raw_text, tables, metadata
+
+
+class ArchitecturalExtractor(PyMuPdfExtractor):
+    """Specialized extractor for architectural drawings."""
+    
+    def __init__(self, logger: Optional[logging.Logger] = None):
+        super().__init__(logger)
+    
+    @time_operation("extraction")
+    async def extract(self, file_path: str) -> ExtractionResult:
+        """Extract architectural-specific content from PDF."""
+        # Get base extraction using parent method
+        result = await super().extract(file_path)
+        
+        if not result.success:
+            return result
+            
+        # Enhance extraction with architectural-specific processing
+        try:
+            # Extract room information more effectively
+            enhanced_text = self._enhance_room_information(result.raw_text)
+            result.raw_text = enhanced_text
+            
+            # Prioritize tables containing room schedules, door schedules, etc.
+            prioritized_tables = self._prioritize_architectural_tables(result.tables)
+            result.tables = prioritized_tables
+            
+            self.logger.info(f"Enhanced architectural extraction for {file_path}")
+            return result
+        except Exception as e:
+            self.logger.warning(f"Error in architectural enhancement for {file_path}: {str(e)}")
+            # Fall back to base extraction on error
+            return result
+    
+    def _enhance_room_information(self, text: str) -> str:
+        """Extract and highlight room information in text."""
+        # Add a marker for room information
+        if "room" in text.lower() or "space" in text.lower():
+            text = "ROOM INFORMATION DETECTED:\n" + text
+        return text
+    
+    def _prioritize_architectural_tables(self, tables: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Prioritize architectural tables by type."""
+        # Prioritize tables likely to be room schedules
+        room_tables = []
+        other_tables = []
+        
+        for table in tables:
+            content = table.get("content", "").lower()
+            if "room" in content or "space" in content or "finish" in content:
+                room_tables.append(table)
+            else:
+                other_tables.append(table)
+                
+        return room_tables + other_tables
+
+
+class ElectricalExtractor(PyMuPdfExtractor):
+    """Specialized extractor for electrical drawings."""
+    
+    def __init__(self, logger: Optional[logging.Logger] = None):
+        super().__init__(logger)
+    
+    @time_operation("extraction")
+    async def extract(self, file_path: str) -> ExtractionResult:
+        """Extract electrical-specific content from PDF."""
+        # Get base extraction using parent method
+        result = await super().extract(file_path)
+        
+        if not result.success:
+            return result
+            
+        # Enhance extraction with electrical-specific processing
+        try:
+            # Focus on panel schedules and circuit information
+            enhanced_text = self._enhance_panel_information(result.raw_text)
+            result.raw_text = enhanced_text
+            
+            # Prioritize tables containing panel schedules
+            prioritized_tables = self._prioritize_electrical_tables(result.tables)
+            result.tables = prioritized_tables
+            
+            self.logger.info(f"Enhanced electrical extraction for {file_path}")
+            return result
+        except Exception as e:
+            self.logger.warning(f"Error in electrical enhancement for {file_path}: {str(e)}")
+            # Fall back to base extraction on error
+            return result
+    
+    def _enhance_panel_information(self, text: str) -> str:
+        """Extract and highlight panel information in text."""
+        # Add a marker for panel information
+        if "panel" in text.lower() or "circuit" in text.lower():
+            text = "PANEL INFORMATION DETECTED:\n" + text
+        return text
+    
+    def _prioritize_electrical_tables(self, tables: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Prioritize electrical tables - panel schedules first."""
+        # Prioritize tables likely to be panel schedules
+        panel_tables = []
+        other_tables = []
+        
+        for table in tables:
+            content = table.get("content", "").lower()
+            if "circuit" in content or "panel" in content:
+                panel_tables.append(table)
+            else:
+                other_tables.append(table)
+                
+        return panel_tables + other_tables
+
+
+class MechanicalExtractor(PyMuPdfExtractor):
+    """Specialized extractor for mechanical drawings."""
+    
+    def __init__(self, logger: Optional[logging.Logger] = None):
+        super().__init__(logger)
+    
+    @time_operation("extraction")
+    async def extract(self, file_path: str) -> ExtractionResult:
+        """Extract mechanical-specific content from PDF."""
+        # Use parent extraction method
+        result = await super().extract(file_path)
+        
+        if not result.success:
+            return result
+            
+        # Enhance extraction with mechanical-specific processing
+        try:
+            # Focus on equipment schedules
+            enhanced_text = self._enhance_equipment_information(result.raw_text)
+            result.raw_text = enhanced_text
+            
+            # Prioritize tables containing equipment schedules
+            prioritized_tables = self._prioritize_mechanical_tables(result.tables)
+            result.tables = prioritized_tables
+            
+            self.logger.info(f"Enhanced mechanical extraction for {file_path}")
+            return result
+        except Exception as e:
+            self.logger.warning(f"Error in mechanical enhancement for {file_path}: {str(e)}")
+            # Fall back to base extraction on error
+            return result
+    
+    def _enhance_equipment_information(self, text: str) -> str:
+        """Extract and highlight equipment information in text."""
+        # Add a marker for equipment information
+        if "equipment" in text.lower() or "hvac" in text.lower() or "cfm" in text.lower():
+            text = "EQUIPMENT INFORMATION DETECTED:\n" + text
+        return text
+    
+    def _prioritize_mechanical_tables(self, tables: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Prioritize mechanical tables - equipment schedules first."""
+        # Simple heuristic - look for equipment-related terms
+        equipment_tables = []
+        other_tables = []
+        
+        for table in tables:
+            content = table.get("content", "").lower()
+            if any(term in content for term in ["equipment", "hvac", "cfm", "tonnage"]):
+                equipment_tables.append(table)
+            else:
+                other_tables.append(table)
+                
+        return equipment_tables + other_tables
+
+
+def create_extractor(drawing_type: str, logger: Optional[logging.Logger] = None) -> PdfExtractor:
+    """
+    Factory function to create the appropriate extractor based on drawing type.
+    
+    Args:
+        drawing_type: Type of drawing (Architectural, Electrical, etc.)
+        logger: Optional logger instance
+        
+    Returns:
+        Appropriate PdfExtractor implementation
+    """
+    drawing_type = drawing_type.lower() if drawing_type else ""
+    
+    if "architectural" in drawing_type:
+        return ArchitecturalExtractor(logger)
+    elif "electrical" in drawing_type:
+        return ElectricalExtractor(logger)
+    elif "mechanical" in drawing_type:
+        return MechanicalExtractor(logger)
+    else:
+        # Default to the base extractor for other types
+        return PyMuPdfExtractor(logger) 

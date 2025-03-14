@@ -10,6 +10,7 @@ from openai import AsyncOpenAI
 from config.settings import OPENAI_API_KEY, get_all_settings
 from utils.logging_utils import setup_logging
 from processing.job_processor import process_job_site_async
+from utils.performance_utils import get_tracker
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -33,4 +34,8 @@ if __name__ == "__main__":
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     
     # 3) Run asynchronous job processing
-    asyncio.run(process_job_site_async(job_folder, output_folder, client)) 
+    asyncio.run(process_job_site_async(job_folder, output_folder, client))
+    
+    # 4) Generate performance report
+    tracker = get_tracker()
+    tracker.log_report() 
