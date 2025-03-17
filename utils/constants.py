@@ -21,3 +21,19 @@ def get_drawing_type(filename: str) -> str:
         if any(prefix.startswith(p.upper()) for p in prefixes):
             return dtype
     return 'General'
+
+def get_drawing_subtype(filename: str) -> str:
+    """
+    Detect the drawing subtype based on keywords in the filename.
+    """
+    filename_lower = filename.lower()
+    if "panel schedule" in filename_lower or "electrical schedule" in filename_lower:
+        return "electrical_panel_schedule"
+    elif "mechanical schedule" in filename_lower:
+        return "mechanical_schedule"
+    elif "plumbing schedule" in filename_lower:
+        return "plumbing_schedule"
+    elif "wall types" in filename_lower or "partition types" in filename_lower:
+        return "architectural_schedule"
+    else:
+        return "default"
