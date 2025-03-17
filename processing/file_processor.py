@@ -56,9 +56,10 @@ async def process_pdf_async(
     raw_content_placeholder = ""
     if is_panel_schedule(file_name, raw_content_placeholder):
         logger.info(f"Detected panel schedule for {file_name}. Routing to specialized processor.")
-        # We'll import & call our new chunk-based logic
+        
+        # We'll import & call our new chunk-based logic, now passing drawing_type
         from processing.panel_schedule_processor import process_panel_schedule_pdf_async
-        return await process_panel_schedule_pdf_async(pdf_path, client, output_folder)
+        return await process_panel_schedule_pdf_async(pdf_path, client, output_folder, drawing_type)
 
     # For non-panel schedules, do your normal approach
     with tqdm(total=100, desc=f"Processing {file_name}", leave=False) as pbar:

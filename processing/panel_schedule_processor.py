@@ -7,15 +7,15 @@ from tqdm.asyncio import tqdm
 from services.extraction_service import PyMuPdfExtractor
 from services.storage_service import FileSystemStorage
 from services.ai_service import DrawingAiService, AiRequest, ModelType
-from utils.performance_utils import time_operation
 
-# How many lines we feed to GPT in each chunk
+# If you have a performance decorator, you can add it here if desired
+# from utils.performance_utils import time_operation
+
 DEFAULT_CHUNK_SIZE = 30
 
 def split_text_into_chunks(text: str, chunk_size: int = DEFAULT_CHUNK_SIZE) -> List[str]:
     """
     Splits a text string into multiple chunks of N lines each.
-    This prevents passing huge blocks to GPT at once.
     """
     lines = text.splitlines()
     chunks = []
@@ -27,7 +27,7 @@ def split_text_into_chunks(text: str, chunk_size: int = DEFAULT_CHUNK_SIZE) -> L
 
 def normalize_panel_data_fields(panel_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Optionally unify synonyms in GPT's JSON:
+    Unify synonyms in GPT's JSON:
       - 'description', 'loadType' => 'load_name'
       - 'ocp', 'amperage', 'breaker_size' => 'trip'
       - 'circuit_no', 'circuit_number' => 'circuit'
@@ -64,15 +64,19 @@ def normalize_panel_data_fields(panel_data: Dict[str, Any]) -> Dict[str, Any]:
     panel_data["circuits"] = new_circuits
     return panel_data
 
-@time_operation("total_processing")
-async def process_panel_schedule_pdf_async(pdf_path: str, client, output_folder: str) -> Dict[str, Any]:
+async def process_panel_schedule_pdf_async(
+    pdf_path: str,
+    client,
+    output_folder: str,
+    drawing_type: str
+) -> Dict[str, Any]:
     """
     Specialized function for panel schedules:
-    1) Extract with PyMuPdf
+    1) Extract with PyMuPDF
     2) If any tables found, parse them chunk-by-chunk
     3) If no tables, fallback to raw text chunking
     4) Merge partial results & synonyms
-    5) Save to _panel_schedules.json
+    5) Save final JSON to output_folder/drawing_type
     """
     logger = logging.getLogger(__name__)
     file_name = os.path.basename(pdf_path)
@@ -104,10 +108,13 @@ async def process_panel_schedule_pdf_async(pdf_path: str, client, output_folder:
                 logger.warning(f"No panel data extracted from {file_name}.")
                 return {"success": True, "file": pdf_path, "panel_schedule": True, "data": []}
 
-            # Write final JSON
+            # Now we place the final JSON in output_folder/drawing_type
+            type_folder = os.path.join(output_folder, drawing_type)
+            os.makedirs(type_folder, exist_ok=True)
+
             base_name = os.path.splitext(file_name)[0]
             output_filename = f"{base_name}_panel_schedules.json"
-            output_path = os.path.join(output_folder, output_filename)
+            output_path = os.path.join(type_folder, output_filename)
 
             await storage.save_json(panels_data, output_path)
             pbar.update(30)
@@ -160,7 +167,6 @@ Do not skip any circuit rows. If missing data, leave blank.
             logger.debug(f"Skipping empty table {i}.")
             continue
 
-        # Break table Markdown into chunks
         table_chunks = split_text_into_chunks(table_md, DEFAULT_CHUNK_SIZE)
         merged_panel = {
             "panel_name": None,
@@ -171,7 +177,6 @@ Do not skip any circuit rows. If missing data, leave blank.
         for cidx, chunk_text in enumerate(table_chunks):
             user_text = f"TABLE CHUNK {cidx+1}/{len(table_chunks)}:\n{chunk_text}"
 
-            # Build AiRequest, not a dict
             request = AiRequest(
                 content=user_text,
                 model_type=ModelType.GPT_4O_MINI,
@@ -196,7 +201,6 @@ Do not skip any circuit rows. If missing data, leave blank.
 
                 if "circuits" in partial_json and isinstance(partial_json["circuits"], list):
                     merged_panel["circuits"].extend(partial_json["circuits"])
-
             except json.JSONDecodeError as e:
                 logger.error(f"JSON decode error (table {i}, chunk {cidx}): {str(e)}")
 
@@ -216,7 +220,6 @@ async def _fallback_raw_text(raw_text: str, client, logger: logging.Logger) -> L
     from services.ai_service import AiRequest
 
     ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
-
     text_chunks = split_text_into_chunks(raw_text, DEFAULT_CHUNK_SIZE)
 
     fallback_prompt = """
@@ -241,7 +244,6 @@ Do not skip lines that look like circuit data.
     for idx, chunk_text in enumerate(text_chunks):
         user_text = f"RAW TEXT CHUNK {idx+1}/{len(text_chunks)}:\n{chunk_text}"
 
-        # Create AiRequest
         request = AiRequest(
             content=user_text,
             model_type=ModelType.GPT_4O_MINI,
@@ -266,7 +268,6 @@ Do not skip lines that look like circuit data.
 
             if "circuits" in partial_json and isinstance(partial_json["circuits"], list):
                 fallback_data["circuits"].extend(partial_json["circuits"])
-
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error in fallback chunk {idx}: {str(e)}")
 
