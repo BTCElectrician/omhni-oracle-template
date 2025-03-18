@@ -9,7 +9,7 @@ from services.extraction_service import create_extractor
 from services.ai_service import DrawingAiService, ModelType
 from services.storage_service import FileSystemStorage
 from utils.performance_utils import time_operation
-from utils.prompts import PROMPTS
+from backup.prompts import PROMPTS
 from utils.constants import get_drawing_type, get_drawing_subtype
 from templates.room_templates import process_architectural_drawing
 

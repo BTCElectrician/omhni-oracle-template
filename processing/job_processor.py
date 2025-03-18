@@ -19,10 +19,11 @@ async def process_worker(
     client,
     output_folder: str,
     templates_created: Dict[str, bool],
-    results: List[Dict[str, Any]]
+    results: List[Dict[str, Any]],
+    worker_id: int
 ) -> None:
     """
-    Worker process that takes jobs from the queue and processes them.
+    Enhanced worker process that takes jobs from the queue and processes them.
     
     Args:
         queue: Queue of PDF files to process
@@ -30,41 +31,56 @@ async def process_worker(
         output_folder: Output folder for processed files
         templates_created: Dictionary tracking created templates
         results: List to collect processing results
+        worker_id: Unique identifier for this worker
     """
     logger = logging.getLogger(__name__)
+    logger.info(f"Worker {worker_id} started")
     
     while True:
         try:
             # Get a task from the queue, or break if queue is empty
             try:
                 pdf_file, drawing_type = await asyncio.wait_for(queue.get(), timeout=1.0)
+                logger.info(f"Worker {worker_id} processing {os.path.basename(pdf_file)}")
             except asyncio.TimeoutError:
                 # Check if queue is empty before breaking
                 if queue.empty():
+                    logger.info(f"Worker {worker_id} finishing - queue empty")
                     break
                 continue
                 
             try:
-                # Process the PDF
-                result = await process_pdf_async(
-                    pdf_path=pdf_file,
-                    client=client,
-                    output_folder=output_folder,
-                    drawing_type=drawing_type,
-                    templates_created=templates_created
-                )
+                # Process the PDF with timeout protection
+                try:
+                    result = await asyncio.wait_for(
+                        process_pdf_async(
+                            pdf_path=pdf_file,
+                            client=client,
+                            output_folder=output_folder,
+                            drawing_type=drawing_type,
+                            templates_created=templates_created
+                        ),
+                        timeout=600  # 10-minute timeout per file
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"Timeout processing {pdf_file} after 10 minutes")
+                    result = {
+                        "success": False,
+                        "error": "Processing timed out after 10 minutes",
+                        "file": pdf_file
+                    }
                 
                 # Add result to results list
                 results.append(result)
                 
                 # Log result
                 if result['success']:
-                    logger.info(f"Successfully processed {pdf_file}")
+                    logger.info(f"Worker {worker_id} successfully processed {pdf_file}")
                 else:
-                    logger.error(f"Failed to process {pdf_file}: {result['error']}")
+                    logger.error(f"Worker {worker_id} failed to process {pdf_file}: {result['error']}")
                     
             except Exception as e:
-                logger.error(f"Error processing {pdf_file}: {str(e)}")
+                logger.error(f"Worker {worker_id} error processing {pdf_file}: {str(e)}")
                 results.append({
                     "success": False,
                     "error": str(e),
@@ -75,7 +91,8 @@ async def process_worker(
                 queue.task_done()
                 
         except Exception as e:
-            logger.error(f"Worker error: {str(e)}")
+            logger.error(f"Worker {worker_id} error: {str(e)}")
+            # Continue to next item rather than breaking
 
 
 async def monitor_progress(
@@ -112,7 +129,7 @@ async def monitor_progress(
 async def process_job_site_async(job_folder: str, output_folder: str, client) -> None:
     """
     Orchestrates processing of a 'job site,' i.e., an entire folder of PDF files.
-    Uses a dynamic worker pool for optimal throughput.
+    Uses prioritized queue processing for optimal throughput.
     
     Args:
         job_folder: Input folder containing PDF files
@@ -136,7 +153,7 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
     # Create a queue of PDF files to process
     queue = asyncio.Queue()
     
-    # Group files by drawing type for better organization
+    # Group and prioritize files by drawing type
     files_by_type = {}
     for pdf_file in pdf_files:
         drawing_type = get_drawing_type(pdf_file)
@@ -144,14 +161,31 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
             files_by_type[drawing_type] = []
         files_by_type[drawing_type].append(pdf_file)
     
-    # Add files to queue
+    # Define processing priority order
+    priority_order = [
+        'Architectural',  # Process architectural drawings first
+        'Electrical',     # Then electrical
+        'Mechanical',     # Then mechanical
+        'Plumbing',       # Then plumbing
+        'General'         # Other drawings last
+    ]
+    
+    # Add files to queue in priority order
+    for drawing_type in priority_order:
+        if drawing_type in files_by_type:
+            files = files_by_type[drawing_type]
+            logger.info(f"Queueing {len(files)} {drawing_type} drawings")
+            for pdf_file in files:
+                await queue.put((pdf_file, drawing_type))
+    
+    # Add any remaining file types not explicitly prioritized
     for drawing_type, files in files_by_type.items():
-        logger.info(f"Found {len(files)} {drawing_type} drawings")
-        for pdf_file in files:
-            await queue.put((pdf_file, drawing_type))
+        if drawing_type not in priority_order:
+            logger.info(f"Queueing {len(files)} {drawing_type} drawings")
+            for pdf_file in files:
+                await queue.put((pdf_file, drawing_type))
     
     # Determine optimal number of workers
-    # Use at most BATCH_SIZE workers, but limit based on CPU cores and queue size
     max_workers = min(BATCH_SIZE, os.cpu_count() or 4, len(pdf_files))
     logger.info(f"Starting {max_workers} workers for {len(pdf_files)} files")
     
@@ -163,11 +197,11 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
         # Track original queue size for progress
         original_queue_size = queue.qsize()
         
-        # Create workers
+        # Create workers with IDs
         workers = []
-        for _ in range(max_workers):
+        for i in range(max_workers):
             worker = asyncio.create_task(
-                process_worker(queue, client, output_folder, templates_created, all_results)
+                process_worker(queue, client, output_folder, templates_created, all_results, i+1)
             )
             workers.append(worker)
         
