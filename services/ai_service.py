@@ -1,73 +1,28 @@
-"""
-AI service interface and implementations for text processing with GPT models.
-"""
+import json
 import logging
 from enum import Enum
-from typing import Dict, Any, Optional, TypeVar, Generic
+from typing import Dict, Any, Optional
 from openai import AsyncOpenAI
-
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from utils.performance_utils import time_operation
-
-T = TypeVar('T')
-
 
 class ModelType(Enum):
     """Enumeration of supported AI model types."""
     GPT_4O_MINI = "gpt-4o-mini-2024-07-18"
 
-
-class AiRequest:
-    """Request object for AI service."""
-    def __init__(
-        self,
-        content: str,
-        model_type: ModelType,
-        temperature: float,
-        max_tokens: int,
-        response_format: Dict[str, str],
-        system_message: str
-    ):
-        self.content = content
-        self.model_type = model_type
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.response_format = response_format
-        self.system_message = system_message
-
-
-class AiResponse(Generic[T]):
-    """Response object from AI service."""
-    def __init__(
-        self,
-        success: bool,
-        content: Optional[T] = None,
-        error: Optional[str] = None,
-        usage: Optional[Dict[str, Any]] = None
-    ):
-        self.success = success
-        self.content = content
-        self.error = error
-        self.usage = usage or {}
-
-
 class DrawingAiService:
     """
     Specialized AI service for processing construction drawings.
     """
-    def __init__(
-        self,
-        client: AsyncOpenAI,
-        drawing_instructions: Dict[str, str],
-        logger: Optional[logging.Logger] = None
-    ):
+    def __init__(self, client: AsyncOpenAI, logger: Optional[logging.Logger] = None):
+        """
+        Initialize the DrawingAiService.
+
+        Args:
+            client: AsyncOpenAI client instance
+            logger: Optional logger instance
+        """
         self.client = client
-        self.drawing_instructions = drawing_instructions
         self.logger = logger or logging.getLogger(__name__)
 
     @retry(
@@ -75,119 +30,85 @@ class DrawingAiService:
         wait=wait_exponential(multiplier=1, min=4, max=10),
         retry=retry_if_exception_type(Exception)
     )
-    async def process(self, request: AiRequest) -> AiResponse[str]:
-        """
-        Process content using an AI model.
-        
-        Args:
-            request: AiRequest object containing the content to process
-            
-        Returns:
-            AiResponse containing the processed content
-        """
-        try:
-            response = await self.client.chat.completions.create(
-                model=request.model_type.value,
-                messages=[
-                    {"role": "system", "content": request.system_message},
-                    {"role": "user", "content": request.content}
-                ],
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                response_format=request.response_format
-            )
-            content = response.choices[0].message.content
-            
-            usage_info = {}
-            if hasattr(response, "usage") and response.usage:
-                usage_info["total_tokens"] = response.usage.total_tokens
-                
-            return AiResponse(success=True, content=content, usage=usage_info)
-        except Exception as e:
-            self.logger.error(f"AI processing error: {str(e)}")
-            return AiResponse(success=False, error=str(e))
-
     @time_operation("ai_processing")
     async def process_with_prompt(
         self,
         raw_content: str,
-        prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 16000,
-        model_type: ModelType = ModelType.GPT_4O_MINI
+        model_type: ModelType = ModelType.GPT_4O_MINI,
+        system_message: Optional[str] = None
     ) -> str:
         """
-        Process a drawing using a specific prompt.
-        
-        Args:
-            raw_content: Raw content from the drawing
-            prompt: Custom prompt to use for processing
-            temperature: Temperature parameter
-            max_tokens: Maximum tokens to generate
-            model_type: AI model type to use
-            
-        Returns:
-            Processed content as a string
-        """
-        request = AiRequest(
-            content=raw_content,
-            model_type=model_type,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"},
-            system_message=prompt
-        )
-        
-        response = await self.process(request)
-        if response.success:
-            return response.content
-        else:
-            self.logger.error(f"AI processing failed: {response.error}")
-            raise Exception(f"AI processing failed: {response.error}")
+        Process a construction drawing using a specific prompt.
 
-    @time_operation("ai_processing")
-    async def process_drawing(
-        self,
-        raw_content: str,
-        drawing_type: str,
-        temperature: float = 0.2,
-        max_tokens: int = 16000,
-        model_type: ModelType = ModelType.GPT_4O_MINI
-    ) -> AiResponse[str]:
-        """
-        Process a construction drawing using the AI service.
-        
         Args:
             raw_content: Raw content from the drawing
-            drawing_type: Type of drawing (Architectural, Electrical, etc.)
-            temperature: Temperature parameter
+            temperature: Temperature parameter for the AI model
             max_tokens: Maximum tokens to generate
             model_type: AI model type to use
-            
+            system_message: Optional custom system message to override default
+
         Returns:
-            AiResponse containing the processed drawing
+            Processed content as a JSON string
+
+        Raises:
+            JSONDecodeError: If the response is not valid JSON
+            ValueError: If the JSON structure is invalid
+            Exception: For other processing errors
         """
-        instruction = self.drawing_instructions.get(drawing_type, self.drawing_instructions.get("General", ""))
+        default_system_message = """
+        You are an AI assistant tasked with processing construction drawings. Your job is to extract all relevant information from the provided content and organize it into a structured JSON object with the following sections:
+
+        - "metadata": An object containing drawing metadata such as "drawing_number", "title", "date", and "revision". Include any available information; if a field is missing, omit it.
+
+        - "schedules": An array of schedule objects. Each schedule should have a "type" (e.g., "electrical_panel", "mechanical") and a "data" array containing objects with standardized field names. For example, use "load_name" for fields like "Load" or "Load Type", and "trip" for "Breaker Size" or "Amperage". If a field doesn't match a standard name, include it as-is.
+
+        - "notes": An array of strings containing any notes or instructions found in the drawing.
+
+        - "specifications": An array of objects, each with a "section_title" and "content" for specification sections.
         
-        system_message = f"""
-        Parse this {drawing_type} drawing/schedule into a structured JSON format. Guidelines:
-        1. For text: Extract key information, categorize elements.
-        2. For tables: Preserve structure, use nested arrays/objects.
-        3. Create a hierarchical structure, use consistent key names.
-        4. Include metadata (drawing number, scale, date) if available.
-        5. {instruction}
-        6. For all drawing types, if room information is present, always include a 'rooms' array in the JSON output, 
-           with each room having at least 'number' and 'name' fields.
-        Ensure the entire response is a valid JSON object.
+        - "rooms": For architectural drawings, include an array of rooms with 'number', 'name', 'electrical_info', and 'architectural_info'.
+
+        IMPORTANT: For architectural drawings, ALWAYS include a 'rooms' array, even if you have to infer room information from context.
+        
+        Ensure that the entire response is a single, valid JSON object. Do not include any additional text or explanations outside of the JSON.
         """
-        
-        request = AiRequest(
-            content=raw_content,
-            model_type=model_type,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"},
-            system_message=system_message
-        )
-        
-        return await self.process(request)
+
+        # Use the provided system message or fall back to default
+        final_system_message = system_message if system_message else default_system_message
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=model_type.value,
+                messages=[
+                    {"role": "system", "content": final_system_message},
+                    {"role": "user", "content": raw_content}
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            content = response.choices[0].message.content
+            parsed_content = json.loads(content)
+            if not self.validate_json(parsed_content):
+                raise ValueError("Invalid JSON structure: missing required keys")
+            return content
+        except json.JSONDecodeError as e:
+            self.logger.error(f"JSON decoding error: {str(e)}")
+            raise
+        except Exception as e:
+            self.logger.error(f"Error processing drawing: {str(e)}")
+            raise
+
+    def validate_json(self, json_data: Dict[str, Any]) -> bool:
+        """
+        Validate the JSON structure.
+
+        Args:
+            json_data: Parsed JSON data
+
+        Returns:
+            True if the JSON has all required keys, False otherwise
+        """
+        required_keys = ["metadata", "schedules", "notes", "specifications"]
+        return all(key in json_data for key in required_keys)

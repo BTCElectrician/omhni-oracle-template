@@ -18,6 +18,8 @@ DRAWING_INSTRUCTIONS = {
        - 'name': Room name
        - 'finish': Ceiling finish
        - 'height': Ceiling height
+       - 'electrical_info': Any electrical specifications 
+       - 'architectural_info': Any additional architectural details
     2. Room finish schedules
     3. Door/window details
     4. Wall types
@@ -113,13 +115,29 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
         logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} " +
                     f"and max_tokens {params['max_tokens']} for {drawing_type} drawing")
         
+        # Enhanced system message that emphasizes room extraction for architectural drawings
+        system_message = f"""
+        You are processing a construction drawing. Extract all relevant information and organize it into a JSON object with the following sections:
+        - 'metadata': Include drawing number, title, date, etc.
+        - 'schedules': Array of schedules with type and data.
+        - 'notes': Array of notes.
+        - 'specifications': Array of specification sections.
+        - 'rooms': For architectural drawings, include an array of rooms with 'number', 'name', 'electrical_info', and 'architectural_info'.
+        
+        {DRAWING_INSTRUCTIONS.get(drawing_type, DRAWING_INSTRUCTIONS["General"])}
+        
+        IMPORTANT: For architectural drawings, ALWAYS include a 'rooms' array, even if you have to infer room information from context.
+        Ensure the output is valid JSON.
+        """
+        
         # Process the drawing using the Responses API (falls back to standard if needed)
         response: AiResponse[Dict[str, Any]] = await ai_service.process_drawing_with_responses(
             raw_content=raw_content,
             drawing_type=drawing_type,
             temperature=params["temperature"],
             max_tokens=params["max_tokens"],
-            model_type=params["model_type"]
+            model_type=params["model_type"],
+            system_message=system_message  # Pass the enhanced system message
         )
         
         if response.success:

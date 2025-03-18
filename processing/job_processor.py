@@ -20,10 +20,12 @@ async def process_worker(
     output_folder: str,
     templates_created: Dict[str, bool],
     results: List[Dict[str, Any]],
-    worker_id: int
+    worker_id: int,
+    semaphore: asyncio.Semaphore
 ) -> None:
     """
     Enhanced worker process that takes jobs from the queue and processes them.
+    Uses a semaphore to limit concurrent API calls.
     
     Args:
         queue: Queue of PDF files to process
@@ -32,6 +34,7 @@ async def process_worker(
         templates_created: Dictionary tracking created templates
         results: List to collect processing results
         worker_id: Unique identifier for this worker
+        semaphore: Semaphore to limit concurrent API calls
     """
     logger = logging.getLogger(__name__)
     logger.info(f"Worker {worker_id} started")
@@ -50,18 +53,20 @@ async def process_worker(
                 continue
                 
             try:
-                # Process the PDF with timeout protection
+                # Process the PDF with timeout protection and semaphore
                 try:
-                    result = await asyncio.wait_for(
-                        process_pdf_async(
-                            pdf_path=pdf_file,
-                            client=client,
-                            output_folder=output_folder,
-                            drawing_type=drawing_type,
-                            templates_created=templates_created
-                        ),
-                        timeout=600  # 10-minute timeout per file
-                    )
+                    async with semaphore:
+                        logger.info(f"Worker {worker_id} acquired semaphore for {os.path.basename(pdf_file)}")
+                        result = await asyncio.wait_for(
+                            process_pdf_async(
+                                pdf_path=pdf_file,
+                                client=client,
+                                output_folder=output_folder,
+                                drawing_type=drawing_type,
+                                templates_created=templates_created
+                            ),
+                            timeout=600  # 10-minute timeout per file
+                        )
                 except asyncio.TimeoutError:
                     logger.error(f"Timeout processing {pdf_file} after 10 minutes")
                     result = {
@@ -129,7 +134,7 @@ async def monitor_progress(
 async def process_job_site_async(job_folder: str, output_folder: str, client) -> None:
     """
     Orchestrates processing of a 'job site,' i.e., an entire folder of PDF files.
-    Uses prioritized queue processing for optimal throughput.
+    Uses prioritized queue processing with file size sorting and concurrency control.
     
     Args:
         job_folder: Input folder containing PDF files
@@ -170,20 +175,27 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
         'General'         # Other drawings last
     ]
     
-    # Add files to queue in priority order
+    # Add files to queue in priority order, sorting by file size within each group
     for drawing_type in priority_order:
         if drawing_type in files_by_type:
-            files = files_by_type[drawing_type]
-            logger.info(f"Queueing {len(files)} {drawing_type} drawings")
+            # Sort files by size (smallest first)
+            files = sorted(files_by_type[drawing_type], key=lambda x: os.path.getsize(x))
+            logger.info(f"Queueing {len(files)} {drawing_type} drawings (sorted by size)")
             for pdf_file in files:
                 await queue.put((pdf_file, drawing_type))
     
-    # Add any remaining file types not explicitly prioritized
+    # Add any remaining file types not explicitly prioritized (also sorted by size)
     for drawing_type, files in files_by_type.items():
         if drawing_type not in priority_order:
-            logger.info(f"Queueing {len(files)} {drawing_type} drawings")
+            # Sort files by size (smallest first)
+            files = sorted(files, key=lambda x: os.path.getsize(x))
+            logger.info(f"Queueing {len(files)} {drawing_type} drawings (sorted by size)")
             for pdf_file in files:
                 await queue.put((pdf_file, drawing_type))
+    
+    # Create a semaphore to limit concurrent API calls to 5
+    semaphore = asyncio.Semaphore(5)
+    logger.info("Using semaphore to limit concurrent API calls to 5")
     
     # Determine optimal number of workers
     max_workers = min(BATCH_SIZE, os.cpu_count() or 4, len(pdf_files))
@@ -201,7 +213,7 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
         workers = []
         for i in range(max_workers):
             worker = asyncio.create_task(
-                process_worker(queue, client, output_folder, templates_created, all_results, i+1)
+                process_worker(queue, client, output_folder, templates_created, all_results, i+1, semaphore)
             )
             workers.append(worker)
         

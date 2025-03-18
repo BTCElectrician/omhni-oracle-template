@@ -156,12 +156,20 @@ class PyMuPdfExtractor(PdfExtractor):
                 # Add page header
                 page_text = f"PAGE {i+1}:\n"
                 
-                # Get text directly and avoid storing the textpage object
+                # Try block-based extraction first
                 try:
-                    page_text += page.get_text() + "\n\n"
+                    blocks = page.get_text("blocks")
+                    for block in blocks:
+                        if block[6] == 0:  # Text block (type 0)
+                            page_text += block[4] + "\n"
                 except Exception as e:
-                    self.logger.warning(f"Error extracting text from page {i+1}: {str(e)}")
-                    page_text += "[Error extracting text from this page]\n\n"
+                    self.logger.warning(f"Block extraction error on page {i+1}: {str(e)}")
+                    # Fall back to regular text extraction
+                    try:
+                        page_text += page.get_text() + "\n\n"
+                    except Exception as e2:
+                        self.logger.warning(f"Error extracting text from page {i+1}: {str(e2)}")
+                        page_text += "[Error extracting text from this page]\n\n"
                 
                 # Add to overall text
                 raw_text += page_text
@@ -170,26 +178,20 @@ class PyMuPdfExtractor(PdfExtractor):
                 try:
                     # Find tables on the page
                     table_finder = page.find_tables()
-                    if table_finder and hasattr(table_finder, "tables"):  # Check if tables exist
+                    if table_finder and hasattr(table_finder, "tables"):
                         for j, table in enumerate(table_finder.tables):
-                            # Convert table to markdown immediately to avoid reference issues
                             try:
                                 table_markdown = table.to_markdown()
-                                table_dict = {
-                                    "page": i+1,
-                                    "table_index": j,
-                                    "rows": len(table_finder.tables[j].cells) if hasattr(table, "cells") else 0,
-                                    "cols": len(table_finder.tables[j].cells[0]) if hasattr(table, "cells") and table.cells else 0,
-                                    "content": table_markdown
-                                }
-                                tables.append(table_dict)
-                            except Exception as e:
-                                self.logger.warning(f"Error converting table {j} on page {i+1} to markdown: {str(e)}")
-                                # Add a placeholder for the failed table
                                 tables.append({
                                     "page": i+1,
                                     "table_index": j,
-                                    "error": str(e),
+                                    "content": table_markdown
+                                })
+                            except Exception as e:
+                                self.logger.warning(f"Error converting table {j} on page {i+1}: {str(e)}")
+                                tables.append({
+                                    "page": i+1,
+                                    "table_index": j,
                                     "content": f"[Error extracting table {j} from page {i+1}]"
                                 })
                 except Exception as e:
