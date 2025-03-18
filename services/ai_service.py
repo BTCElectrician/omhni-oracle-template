@@ -24,7 +24,7 @@ from utils.performance_utils import time_operation
 
 class ModelType(Enum):
     """Enumeration of supported AI model types."""
-    GPT_4O_MINI = "gpt-4o-mini"
+    GPT_4O_MINI = "gpt-4o-mini-2024-07-18"
 
 
 class AiError(Exception):
