@@ -3,7 +3,7 @@ Application settings loaded from environment variables.
 """
 import os
 from dotenv import load_dotenv
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 # Load environment variables from .env file
 load_dotenv()
@@ -27,14 +27,7 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templat
 # Additional configuration settings
 DEBUG_MODE = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
 
-# Function to get all settings as a dictionary
 def get_all_settings() -> Dict[str, Any]:
-    """
-    Get all settings as a dictionary.
-    
-    Returns:
-        Dictionary of all settings
-    """
     return {
         "OPENAI_API_KEY": "***REDACTED***" if OPENAI_API_KEY else None,
         "LOG_LEVEL": LOG_LEVEL,

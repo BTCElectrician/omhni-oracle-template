@@ -1,6 +1,3 @@
-"""
-Main application entry point with enhanced error handling and reporting.
-"""
 import os
 import sys
 import asyncio
@@ -35,7 +32,7 @@ async def main_async():
     logging.info(f"Application settings: {get_all_settings()}")
     
     try:
-        # 2) Create OpenAI Client
+        # 2) Create OpenAI Client (v1.66.3)
         client = AsyncOpenAI(api_key=OPENAI_API_KEY)
         
         # 3) Record start time
