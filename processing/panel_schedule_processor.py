@@ -11,19 +11,18 @@ from services.ai_service import DrawingAiService, AiRequest, ModelType
 # If you have a performance decorator, you can add it here if desired
 # from utils.performance_utils import time_operation
 
-DEFAULT_CHUNK_SIZE = 30
-
-def split_text_into_chunks(text: str, chunk_size: int = DEFAULT_CHUNK_SIZE) -> List[str]:
+def split_text_into_chunks(text: str, chunk_size: int = None) -> List[str]:
     """
-    Splits a text string into multiple chunks of N lines each.
+    Returns the full text as a single chunk with no splitting.
+    
+    Args:
+        text: The text to process
+        chunk_size: Ignored parameter (kept for backwards compatibility)
+        
+    Returns:
+        List with a single item containing the full text
     """
-    lines = text.splitlines()
-    chunks = []
-    for i in range(0, len(lines), chunk_size):
-        chunk_slice = lines[i : i + chunk_size]
-        chunk_str = "\n".join(chunk_slice)
-        chunks.append(chunk_str)
-    return chunks
+    return [text]
 
 def normalize_panel_data_fields(panel_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -136,7 +135,7 @@ async def process_panel_schedule_pdf_async(
 
 async def _parse_tables_chunked(tables: List[Dict[str, Any]], client, logger: logging.Logger) -> List[Dict[str, Any]]:
     """
-    For each table's markdown, chunk it and parse with GPT.
+    Process each table's markdown as a complete unit - no chunking.
     Returns a list of panel objects (one per table).
     """
     from services.ai_service import AiRequest
@@ -167,60 +166,42 @@ Do not skip any circuit rows. If missing data, leave blank.
             logger.debug(f"Skipping empty table {i}.")
             continue
 
-        table_chunks = split_text_into_chunks(table_md, DEFAULT_CHUNK_SIZE)
-        merged_panel = {
-            "panel_name": None,
-            "panel_metadata": {},
-            "circuits": []
-        }
+        # Process the entire table as a single unit - NO CHUNKING
+        user_text = f"FULL TABLE:\n{table_md}"
 
-        for cidx, chunk_text in enumerate(table_chunks):
-            user_text = f"TABLE CHUNK {cidx+1}/{len(table_chunks)}:\n{chunk_text}"
+        request = AiRequest(
+            content=user_text,
+            model_type=ModelType.GPT_4O_MINI,
+            temperature=0.2,
+            max_tokens=3000,
+            system_message=system_prompt
+        )
 
-            request = AiRequest(
-                content=user_text,
-                model_type=ModelType.GPT_4O_MINI,
-                temperature=0.2,
-                max_tokens=3000,
-                system_message=system_prompt
-            )
+        response = await ai_service.process(request)
+        if not response.success or not response.content:
+            logger.warning(f"GPT parse error on table {i}: {response.error}")
+            continue
 
-            response = await ai_service.process(request)
-            if not response.success or not response.content:
-                logger.warning(f"GPT parse error on table {i}, chunk {cidx}: {response.error}")
-                continue
-
-            try:
-                partial_json = json.loads(response.content)
-                # Merge partial
-                if "panel_name" in partial_json and not merged_panel["panel_name"]:
-                    merged_panel["panel_name"] = partial_json["panel_name"]
-
-                if "panel_metadata" in partial_json and isinstance(partial_json["panel_metadata"], dict):
-                    merged_panel["panel_metadata"].update(partial_json["panel_metadata"])
-
-                if "circuits" in partial_json and isinstance(partial_json["circuits"], list):
-                    merged_panel["circuits"].extend(partial_json["circuits"])
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON decode error (table {i}, chunk {cidx}): {str(e)}")
-
-        # Normalize synonyms
-        merged_panel = normalize_panel_data_fields(merged_panel)
-        # If we found circuits or a panel name, add it
-        if merged_panel["panel_name"] or merged_panel["circuits"]:
-            all_panels.append(merged_panel)
+        try:
+            panel_json = json.loads(response.content)
+            # Normalize synonyms
+            panel_json = normalize_panel_data_fields(panel_json)
+            # If we found circuits or a panel name, add it
+            if panel_json.get("panel_name") or panel_json.get("circuits"):
+                all_panels.append(panel_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error (table {i}): {str(e)}")
 
     return all_panels
 
 async def _fallback_raw_text(raw_text: str, client, logger: logging.Logger) -> List[Dict[str, Any]]:
     """
-    If no tables found, we chunk the entire raw_text and let GPT parse lines as circuits.
+    If no tables found, process the entire raw_text as a single unit.
     Return a list of one or more panels if discovered.
     """
     from services.ai_service import AiRequest
 
     ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
-    text_chunks = split_text_into_chunks(raw_text, DEFAULT_CHUNK_SIZE)
 
     fallback_prompt = """
 You are an electrical-engineering assistant. I have raw text from a panel schedule PDF.
@@ -235,47 +216,32 @@ Columns might be unclear. Return JSON like:
 Do not skip lines that look like circuit data.
     """.strip()
 
-    fallback_data = {
-        "panel_name": "",
-        "panel_metadata": {},
-        "circuits": []
-    }
+    # Process the entire content as a single unit - NO CHUNKING
+    user_text = f"FULL RAW TEXT:\n{raw_text}"
 
-    for idx, chunk_text in enumerate(text_chunks):
-        user_text = f"RAW TEXT CHUNK {idx+1}/{len(text_chunks)}:\n{chunk_text}"
+    request = AiRequest(
+        content=user_text,
+        model_type=ModelType.GPT_4O_MINI,
+        temperature=0.2,
+        max_tokens=3000,
+        system_message=fallback_prompt
+    )
 
-        request = AiRequest(
-            content=user_text,
-            model_type=ModelType.GPT_4O_MINI,
-            temperature=0.2,
-            max_tokens=3000,
-            system_message=fallback_prompt
-        )
-
-        response = await ai_service.process(request)
-        if not response.success or not response.content:
-            logger.warning(f"GPT parse error in fallback chunk {idx}: {response.error}")
-            continue
-
-        try:
-            partial_json = json.loads(response.content)
-            # Merge partial
-            if "panel_name" in partial_json and not fallback_data["panel_name"]:
-                fallback_data["panel_name"] = partial_json["panel_name"]
-
-            if "panel_metadata" in partial_json and isinstance(partial_json["panel_metadata"], dict):
-                fallback_data["panel_metadata"].update(partial_json["panel_metadata"])
-
-            if "circuits" in partial_json and isinstance(partial_json["circuits"], list):
-                fallback_data["circuits"].extend(partial_json["circuits"])
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in fallback chunk {idx}: {str(e)}")
-
-    # unify synonyms
-    fallback_data = normalize_panel_data_fields(fallback_data)
-
-    # If no circuits or panel name found, return empty list
-    if not fallback_data["panel_name"] and not fallback_data["circuits"]:
+    response = await ai_service.process(request)
+    if not response.success or not response.content:
+        logger.warning(f"GPT parse error in fallback processing: {response.error}")
         return []
 
-    return [fallback_data]
+    try:
+        fallback_data = json.loads(response.content)
+        # Normalize synonyms
+        fallback_data = normalize_panel_data_fields(fallback_data)
+
+        # If no circuits or panel name found, return empty list
+        if not fallback_data.get("panel_name") and not fallback_data.get("circuits"):
+            return []
+
+        return [fallback_data]
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in fallback processing: {str(e)}")
+        return []

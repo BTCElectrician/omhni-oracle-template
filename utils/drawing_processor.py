@@ -48,44 +48,32 @@ def optimize_model_parameters(
     """
     content_length = len(raw_content)
     
-    # Default parameters
+    # Default parameters using a model with a large context window
     params = {
         "model_type": ModelType.GPT_4O_MINI,
         "temperature": 0.2,
-        "max_tokens": 16000
+        "max_tokens": 16000,
     }
     
-    # Adjust based on drawing type
+    # Adjust based on drawing type - only adjust temperature (never modify content)
     if drawing_type == "Electrical":
         if "PANEL-SCHEDULES" in file_name.upper() or "PANEL_SCHEDULES" in file_name.upper():
-            # Panel schedules need more structured output but are often simpler
             params["temperature"] = 0.1
-            params["max_tokens"] = 8000
-            
         elif "LIGHTING" in file_name.upper():
-            # Lighting plans can be complex
-            params["max_tokens"] = 12000
-            
+            params["temperature"] = 0.2
     elif drawing_type == "Architectural":
-        # Architectural drawings need detailed processing
         if "REFLECTED CEILING" in file_name.upper():
             params["temperature"] = 0.15
-            
     elif drawing_type == "Mechanical":
         if "SCHEDULES" in file_name.upper():
-            # Mechanical schedules can be complex
-            params["max_tokens"] = 12000
+            params["temperature"] = 0.2
     
-    # Adjust based on content length
-    if content_length > 50000:
-        # Very large documents may need more powerful model
-        logging.info(f"Large document detected ({content_length} chars), using more powerful model")
-        params["model_type"] = ModelType.GPT_4O
-        
-    elif content_length < 10000 and drawing_type not in ["Architectural", "Electrical"]:
-        # Small documents for less critical drawing types could use faster models
-        logging.info(f"Small document detected ({content_length} chars), optimizing for speed")
-        params["max_tokens"] = 4000
+    # For specifications, use lower temperature for more deterministic results
+    if "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS":
+        logging.info(f"Processing specification document ({content_length} chars)")
+        params["temperature"] = 0.1
+    
+    logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']}")
     
     return params
 
@@ -93,8 +81,7 @@ def optimize_model_parameters(
 @time_operation("ai_processing")
 async def process_drawing(raw_content: str, drawing_type: str, client, file_name: str = "") -> str:
     """
-    Use GPT to parse PDF text + table data into structured JSON
-    based on the drawing type.
+    Use GPT to parse PDF text and table data into structured JSON based on the drawing type.
     
     Args:
         raw_content: Raw content from the drawing
@@ -112,8 +99,7 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
         # Get optimized parameters for this drawing
         params = optimize_model_parameters(drawing_type, raw_content, file_name)
         
-        logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} " +
-                    f"and max_tokens {params['max_tokens']} for {drawing_type} drawing")
+        logging.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters")
         
         # Enhanced system message that emphasizes room extraction for architectural drawings
         system_message = f"""
@@ -132,7 +118,7 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
         
         # Process the drawing using the Responses API (falls back to standard if needed)
         response: AiResponse[Dict[str, Any]] = await ai_service.process_drawing_with_responses(
-            raw_content=raw_content,
+            raw_content=raw_content,  # Send the complete content without modifications
             drawing_type=drawing_type,
             temperature=params["temperature"],
             max_tokens=params["max_tokens"],

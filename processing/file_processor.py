@@ -44,11 +44,21 @@ async def process_pdf_async(
                 logger.error(f"Extraction failed for {pdf_path}: {extraction_result.error}")
                 return {"success": False, "error": extraction_result.error, "file": pdf_path}
 
+            # Concatenate all extracted content without any truncation
             raw_content = extraction_result.raw_text
             for table in extraction_result.tables:
                 raw_content += f"\nTABLE:\n{table['content']}\n"
+                
+            # Log content length for specification files
+            is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
+            if is_specification:
+                logger.info(f"Processing specification document: {file_name} with {len(raw_content)} characters")
+            else:
+                logger.info(f"Processing {drawing_type} drawing: {file_name} with {len(raw_content)} characters")
+                
             pbar.update(20)
 
+            # Send the complete raw content to the AI service
             structured_json = await ai_service.process_with_prompt(raw_content)
             pbar.update(40)
 
