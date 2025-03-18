@@ -19,8 +19,6 @@
 │   ├── a_rooms_template.json
 │   ├── e_rooms_template.json
 │   └── room_templates.py
-├── tests
-│   └── test_pdf_processing.py
 ├── utils
 │   ├── __init__.py
 │   ├── api_utils.py
@@ -38,6 +36,12 @@
 </file_map>
 
 <file_contents>
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/__init__.py
+```py
+# Processing package initialization
+
+```
+
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/config/settings.py
 ```py
 """
@@ -80,1881 +84,6 @@ def get_all_settings() -> Dict[str, Any]:
         "DEBUG_MODE": DEBUG_MODE
     }
 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/__init__.py
-```py
-# Processing package initialization
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/__init__.py
-```py
-# Processing package initialization
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/storage_service.py
-```py
-"""
-Storage service interface and implementations for saving processing results.
-"""
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, BinaryIO
-import os
-import json
-import logging
-import aiofiles
-import asyncio
-
-
-class StorageService(ABC):
-    """
-    Abstract base class defining the interface for storage services.
-    """
-    @abstractmethod
-    async def save_json(self, data: Dict[str, Any], file_path: str) -> bool:
-        """
-        Save JSON data to a file.
-        
-        Args:
-            data: JSON-serializable data to save
-            file_path: Path where the file should be saved
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        pass
-
-    @abstractmethod
-    async def save_text(self, text: str, file_path: str) -> bool:
-        """
-        Save text data to a file.
-        
-        Args:
-            text: Text content to save
-            file_path: Path where the file should be saved
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        pass
-
-    @abstractmethod
-    async def save_binary(self, data: bytes, file_path: str) -> bool:
-        """
-        Save binary data to a file.
-        
-        Args:
-            data: Binary content to save
-            file_path: Path where the file should be saved
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        pass
-
-    @abstractmethod
-    async def read_json(self, file_path: str) -> Optional[Dict[str, Any]]:
-        """
-        Read JSON data from a file.
-        
-        Args:
-            file_path: Path to the file to read
-            
-        Returns:
-            Parsed JSON data if successful, None otherwise
-        """
-        pass
-
-
-class FileSystemStorage(StorageService):
-    """
-    Storage service implementation using the local file system.
-    """
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        self.logger = logger or logging.getLogger(__name__)
-
-    async def save_json(self, data: Dict[str, Any], file_path: str) -> bool:
-        """
-        Save JSON data to a file.
-        
-        Args:
-            data: JSON-serializable data to save
-            file_path: Path where the file should be saved
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
-            # Save the file asynchronously
-            async with aiofiles.open(file_path, 'w') as f:
-                json_str = json.dumps(data, indent=2)
-                await f.write(json_str)
-                
-            self.logger.info(f"Successfully saved JSON to {file_path}")
-            return True
-        except Exception as e:
-            self.logger.error(f"Error saving JSON to {file_path}: {str(e)}")
-            return False
-
-    async def save_text(self, text: str, file_path: str) -> bool:
-        """
-        Save text data to a file.
-        
-        Args:
-            text: Text content to save
-            file_path: Path where the file should be saved
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
-            # Save the file asynchronously
-            async with aiofiles.open(file_path, 'w') as f:
-                await f.write(text)
-                
-            self.logger.info(f"Successfully saved text to {file_path}")
-            return True
-        except Exception as e:
-            self.logger.error(f"Error saving text to {file_path}: {str(e)}")
-            return False
-
-    async def save_binary(self, data: bytes, file_path: str) -> bool:
-        """
-        Save binary data to a file.
-        
-        Args:
-            data: Binary content to save
-            file_path: Path where the file should be saved
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
-            # Save the file asynchronously
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(data)
-                
-            self.logger.info(f"Successfully saved binary data to {file_path}")
-            return True
-        except Exception as e:
-            self.logger.error(f"Error saving binary data to {file_path}: {str(e)}")
-            return False
-
-    async def read_json(self, file_path: str) -> Optional[Dict[str, Any]]:
-        """
-        Read JSON data from a file.
-        
-        Args:
-            file_path: Path to the file to read
-            
-        Returns:
-            Parsed JSON data if successful, None otherwise
-        """
-        try:
-            if not os.path.exists(file_path):
-                self.logger.warning(f"File not found: {file_path}")
-                return None
-                
-            # Read the file asynchronously
-            async with aiofiles.open(file_path, 'r') as f:
-                content = await f.read()
-                
-            # Parse JSON
-            data = json.loads(content)
-            self.logger.info(f"Successfully read JSON from {file_path}")
-            return data
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Error parsing JSON from {file_path}: {str(e)}")
-            return None
-        except Exception as e:
-            self.logger.error(f"Error reading JSON from {file_path}: {str(e)}")
-            return None 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/panel_schedule_processor.py
-```py
-import os
-import json
-import logging
-from typing import Dict, Any, List
-from tqdm.asyncio import tqdm
-
-from services.extraction_service import PyMuPdfExtractor
-from services.storage_service import FileSystemStorage
-from services.ai_service import DrawingAiService, AiRequest, ModelType
-
-# If you have a performance decorator, you can add it here if desired
-# from utils.performance_utils import time_operation
-
-DEFAULT_CHUNK_SIZE = 30
-
-def split_text_into_chunks(text: str, chunk_size: int = DEFAULT_CHUNK_SIZE) -> List[str]:
-    """
-    Splits a text string into multiple chunks of N lines each.
-    """
-    lines = text.splitlines()
-    chunks = []
-    for i in range(0, len(lines), chunk_size):
-        chunk_slice = lines[i : i + chunk_size]
-        chunk_str = "\n".join(chunk_slice)
-        chunks.append(chunk_str)
-    return chunks
-
-def normalize_panel_data_fields(panel_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Unify synonyms in GPT's JSON:
-      - 'description', 'loadType' => 'load_name'
-      - 'ocp', 'amperage', 'breaker_size' => 'trip'
-      - 'circuit_no', 'circuit_number' => 'circuit'
-    """
-    circuits = panel_data.get("circuits", [])
-    new_circuits = []
-
-    for cdict in circuits:
-        c = dict(cdict)
-        # load_name synonyms
-        if "description" in c and "load_name" not in c:
-            c["load_name"] = c.pop("description")
-        if "loadType" in c and "load_name" not in c:
-            c["load_name"] = c.pop("loadType")
-
-        # trip synonyms
-        if "ocp" in c and "trip" not in c:
-            c["trip"] = c.pop("ocp")
-        if "breaker_size" in c and "trip" not in c:
-            c["trip"] = c.pop("breaker_size")
-        if "amperage" in c and "trip" not in c:
-            c["trip"] = c.pop("amperage")
-        if "amp" in c and "trip" not in c:
-            c["trip"] = c.pop("amp")
-
-        # circuit synonyms
-        if "circuit_no" in c and "circuit" not in c:
-            c["circuit"] = c.pop("circuit_no")
-        if "circuit_number" in c and "circuit" not in c:
-            c["circuit"] = c.pop("circuit_number")
-
-        new_circuits.append(c)
-
-    panel_data["circuits"] = new_circuits
-    return panel_data
-
-async def process_panel_schedule_pdf_async(
-    pdf_path: str,
-    client,
-    output_folder: str,
-    drawing_type: str
-) -> Dict[str, Any]:
-    """
-    Specialized function for panel schedules:
-    1) Extract with PyMuPDF
-    2) If any tables found, parse them chunk-by-chunk
-    3) If no tables, fallback to raw text chunking
-    4) Merge partial results & synonyms
-    5) Save final JSON to output_folder/drawing_type
-    """
-    logger = logging.getLogger(__name__)
-    file_name = os.path.basename(pdf_path)
-
-    extractor = PyMuPdfExtractor(logger=logger)
-    storage = FileSystemStorage(logger=logger)
-
-    with tqdm(total=100, desc=f"[PanelSchedules] {file_name}", leave=False) as pbar:
-        try:
-            extraction_result = await extractor.extract(pdf_path)
-            pbar.update(10)
-            if not extraction_result.success:
-                err = f"Extraction failed: {extraction_result.error}"
-                logger.error(err)
-                return {"success": False, "error": err, "file": pdf_path}
-
-            tables = extraction_result.tables
-            raw_text = extraction_result.raw_text
-
-            if tables:
-                logger.info(f"Found {len(tables)} table(s) in {file_name}. Using table-based parsing.")
-                panels_data = await _parse_tables_chunked(tables, client, logger)
-            else:
-                logger.warning(f"No tables found in {file_name}—fallback to raw text approach.")
-                panels_data = await _fallback_raw_text(raw_text, client, logger)
-
-            pbar.update(60)
-            if not panels_data:
-                logger.warning(f"No panel data extracted from {file_name}.")
-                return {"success": True, "file": pdf_path, "panel_schedule": True, "data": []}
-
-            # Now we place the final JSON in output_folder/drawing_type
-            type_folder = os.path.join(output_folder, drawing_type)
-            os.makedirs(type_folder, exist_ok=True)
-
-            base_name = os.path.splitext(file_name)[0]
-            output_filename = f"{base_name}_panel_schedules.json"
-            output_path = os.path.join(type_folder, output_filename)
-
-            await storage.save_json(panels_data, output_path)
-            pbar.update(30)
-
-            logger.info(f"Saved panel schedules to {output_path}")
-            pbar.update(10)
-
-            return {
-                "success": True,
-                "file": output_path,
-                "panel_schedule": True,
-                "data": panels_data
-            }
-
-        except Exception as ex:
-            pbar.update(100)
-            logger.error(f"Unhandled error processing panel schedule {pdf_path}: {str(ex)}")
-            return {"success": False, "error": str(ex), "file": pdf_path}
-
-async def _parse_tables_chunked(tables: List[Dict[str, Any]], client, logger: logging.Logger) -> List[Dict[str, Any]]:
-    """
-    For each table's markdown, chunk it and parse with GPT.
-    Returns a list of panel objects (one per table).
-    """
-    from services.ai_service import AiRequest
-
-    ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
-    all_panels = []
-
-    system_prompt = """
-You are an advanced electrical-engineering assistant. I'm giving you a table from a panel schedule in Markdown form.
-Synonyms:
-  - 'Load', 'Load Type', 'Description' => 'load_name'
-  - 'Trip', 'OCP', 'Breaker Size', 'Amperage', 'Amp' => 'trip'
-  - 'Circuit No', 'Circuit Number' => 'circuit'
-Return valid JSON like:
-{
-  "panel_name": "...",
-  "panel_metadata": {},
-  "circuits": [
-    { "circuit": "...", "load_name": "...", "trip": "...", "poles": "...", ... }
-  ]
-}
-Do not skip any circuit rows. If missing data, leave blank.
-    """.strip()
-
-    for i, tbl_info in enumerate(tables):
-        table_md = tbl_info["content"]
-        if not table_md.strip():
-            logger.debug(f"Skipping empty table {i}.")
-            continue
-
-        table_chunks = split_text_into_chunks(table_md, DEFAULT_CHUNK_SIZE)
-        merged_panel = {
-            "panel_name": None,
-            "panel_metadata": {},
-            "circuits": []
-        }
-
-        for cidx, chunk_text in enumerate(table_chunks):
-            user_text = f"TABLE CHUNK {cidx+1}/{len(table_chunks)}:\n{chunk_text}"
-
-            request = AiRequest(
-                content=user_text,
-                model_type=ModelType.GPT_4O_MINI,
-                temperature=0.2,
-                max_tokens=3000,
-                system_message=system_prompt
-            )
-
-            response = await ai_service.process(request)
-            if not response.success or not response.content:
-                logger.warning(f"GPT parse error on table {i}, chunk {cidx}: {response.error}")
-                continue
-
-            try:
-                partial_json = json.loads(response.content)
-                # Merge partial
-                if "panel_name" in partial_json and not merged_panel["panel_name"]:
-                    merged_panel["panel_name"] = partial_json["panel_name"]
-
-                if "panel_metadata" in partial_json and isinstance(partial_json["panel_metadata"], dict):
-                    merged_panel["panel_metadata"].update(partial_json["panel_metadata"])
-
-                if "circuits" in partial_json and isinstance(partial_json["circuits"], list):
-                    merged_panel["circuits"].extend(partial_json["circuits"])
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON decode error (table {i}, chunk {cidx}): {str(e)}")
-
-        # Normalize synonyms
-        merged_panel = normalize_panel_data_fields(merged_panel)
-        # If we found circuits or a panel name, add it
-        if merged_panel["panel_name"] or merged_panel["circuits"]:
-            all_panels.append(merged_panel)
-
-    return all_panels
-
-async def _fallback_raw_text(raw_text: str, client, logger: logging.Logger) -> List[Dict[str, Any]]:
-    """
-    If no tables found, we chunk the entire raw_text and let GPT parse lines as circuits.
-    Return a list of one or more panels if discovered.
-    """
-    from services.ai_service import AiRequest
-
-    ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
-    text_chunks = split_text_into_chunks(raw_text, DEFAULT_CHUNK_SIZE)
-
-    fallback_prompt = """
-You are an electrical-engineering assistant. I have raw text from a panel schedule PDF.
-Columns might be unclear. Return JSON like:
-{
-  "panel_name": "...",
-  "panel_metadata": {},
-  "circuits": [
-    { "circuit": "...", "load_name": "...", "trip": "...", "poles": "...", ... }
-  ]
-}
-Do not skip lines that look like circuit data.
-    """.strip()
-
-    fallback_data = {
-        "panel_name": "",
-        "panel_metadata": {},
-        "circuits": []
-    }
-
-    for idx, chunk_text in enumerate(text_chunks):
-        user_text = f"RAW TEXT CHUNK {idx+1}/{len(text_chunks)}:\n{chunk_text}"
-
-        request = AiRequest(
-            content=user_text,
-            model_type=ModelType.GPT_4O_MINI,
-            temperature=0.2,
-            max_tokens=3000,
-            system_message=fallback_prompt
-        )
-
-        response = await ai_service.process(request)
-        if not response.success or not response.content:
-            logger.warning(f"GPT parse error in fallback chunk {idx}: {response.error}")
-            continue
-
-        try:
-            partial_json = json.loads(response.content)
-            # Merge partial
-            if "panel_name" in partial_json and not fallback_data["panel_name"]:
-                fallback_data["panel_name"] = partial_json["panel_name"]
-
-            if "panel_metadata" in partial_json and isinstance(partial_json["panel_metadata"], dict):
-                fallback_data["panel_metadata"].update(partial_json["panel_metadata"])
-
-            if "circuits" in partial_json and isinstance(partial_json["circuits"], list):
-                fallback_data["circuits"].extend(partial_json["circuits"])
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error in fallback chunk {idx}: {str(e)}")
-
-    # unify synonyms
-    fallback_data = normalize_panel_data_fields(fallback_data)
-
-    # If no circuits or panel name found, return empty list
-    if not fallback_data["panel_name"] and not fallback_data["circuits"]:
-        return []
-
-    return [fallback_data]
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/a_rooms_template.json
-```json
-{
-    "room_id": "",
-    "room_name": "",
-    "walls": {
-      "north": "",
-      "south": "",
-      "east": "",
-      "west": ""
-    },
-    "ceiling_height": "",
-    "dimensions": ""
-}
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/e_rooms_template.json
-```json
-{
-    "room_id": "",
-    "room_name": "",
-    "circuits": {
-        "lighting": [],
-        "power": []
-    },
-    "light_fixtures": {
-        "fixture_ids": [],
-        "fixture_count": {}
-    },
-    "outlets": {
-        "regular_outlets": 0,
-        "controlled_outlets": 0
-    },
-    "data": 0,
-    "floor_boxes": 0,
-    "mechanical_equipment": [],
-    "switches": {
-        "type": "",
-        "model": "",
-        "dimming": ""
-    }
-} 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/__init__.py
-```py
-# Services package initialization 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/__init__.py
-```py
-# Processing package initialization
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/api_utils.py
-```py
-"""
-API utilities for making safe API calls.
-"""
-import asyncio
-import logging
-import random
-from typing import Dict, Any
-
-from services.ai_service import AiRateLimitError, AiConnectionError, AiResponseError
-
-MAX_RETRIES = 3
-RETRY_DELAY = 5  # seconds
-
-
-async def async_safe_api_call(client, *args, **kwargs) -> Dict[str, Any]:
-    """
-    Safely call the OpenAI API with retries and backoff.
-    This is a legacy function. Consider using the AI service instead.
-    
-    Args:
-        client: OpenAI client
-        *args: Positional arguments for the API call
-        **kwargs: Keyword arguments for the API call
-        
-    Returns:
-        API response
-        
-    Raises:
-        Exception: If the API call fails after maximum retries
-    """
-    retries = 0
-    delay = 1  # initial backoff
-
-    while retries < MAX_RETRIES:
-        try:
-            return await client.chat.completions.create(*args, **kwargs)
-        except Exception as e:
-            if "rate limit" in str(e).lower():
-                logging.warning(f"Rate limit hit, retrying in {delay} seconds...")
-                retries += 1
-                delay = min(delay * 2, 60)  # cap backoff at 60s
-                await asyncio.sleep(delay + random.uniform(0, 1))  # add jitter
-            else:
-                logging.error(f"API call failed: {e}")
-                await asyncio.sleep(RETRY_DELAY)
-                retries += 1
-
-    logging.error("Max retries reached for API call")
-    raise Exception("Failed to make API call after maximum retries")
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/tests/test_pdf_processing.py
-```py
-import unittest
-from utils.pdf_processor import extract_text_and_tables_from_pdf
-from utils.pdf_utils import structure_panel_data
-
-class TestPDFProcessing(unittest.IsolatedAsyncioTestCase):
-    async def test_panel_schedule_extraction(self):
-        test_file = "samples/panel_schedule.pdf"
-        content = await extract_text_and_tables_from_pdf(test_file)
-        
-        self.assertIn("Main Panel", content)
-        self.assertRegex(content, r"Circuit\s+\d+")
-        
-        structured = await structure_panel_data(client, content)
-        self.assertIn("circuits", structured)
-        self.assertTrue(len(structured["circuits"]) > 5) 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/constants.py
-```py
-import os
-
-DRAWING_TYPES = {
-    'Architectural': ['A', 'AD'],
-    'Electrical': ['E', 'ED'],
-    'Mechanical': ['M', 'MD'],
-    'Plumbing': ['P', 'PD'],
-    'Site': ['S', 'SD'],
-    'Civil': ['C', 'CD'],
-    'Low Voltage': ['LV', 'LD'],
-    'Fire Alarm': ['FA', 'FD'],
-    'Kitchen': ['K', 'KD']
-}
-
-def get_drawing_type(filename: str) -> str:
-    """
-    Detect the drawing type by examining the first 1-2 letters of the filename.
-    """
-    prefix = os.path.basename(filename).split('.')[0][:2].upper()
-    for dtype, prefixes in DRAWING_TYPES.items():
-        if any(prefix.startswith(p.upper()) for p in prefixes):
-            return dtype
-    return 'General'
-
-def get_drawing_subtype(filename: str) -> str:
-    """
-    Detect the drawing subtype based on keywords in the filename.
-    """
-    filename_lower = filename.lower()
-    if "panel schedule" in filename_lower or "electrical schedule" in filename_lower:
-        return "electrical_panel_schedule"
-    elif "mechanical schedule" in filename_lower:
-        return "mechanical_schedule"
-    elif "plumbing schedule" in filename_lower:
-        return "plumbing_schedule"
-    elif "wall types" in filename_lower or "partition types" in filename_lower:
-        return "architectural_schedule"
-    else:
-        return "default"
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/logging_utils.py
-```py
-"""
-Logging utilities with structured logging support.
-"""
-import os
-import logging
-import json
-from datetime import datetime
-from typing import Dict, Any, Optional
-
-
-class StructuredLogger:
-    """
-    Logger that produces structured log messages.
-    """
-    def __init__(self, name: str, context: Optional[Dict[str, Any]] = None):
-        self.logger = logging.getLogger(name)
-        self.context = context or {}
-        
-    def add_context(self, **kwargs):
-        """Add context to all log messages."""
-        self.context.update(kwargs)
-        
-    def info(self, message: str, **kwargs):
-        """Log an info message with structured data."""
-        self._log(logging.INFO, message, **kwargs)
-        
-    def warning(self, message: str, **kwargs):
-        """Log a warning message with structured data."""
-        self._log(logging.WARNING, message, **kwargs)
-        
-    def error(self, message: str, **kwargs):
-        """Log an error message with structured data."""
-        self._log(logging.ERROR, message, **kwargs)
-        
-    def _log(self, level: int, message: str, **kwargs):
-        """Internal method to log a message with context."""
-        log_data = {**self.context, **kwargs, "message": message}
-        self.logger.log(level, json.dumps(log_data))
-
-
-def setup_logging(output_folder: str) -> None:
-    """
-    Configure and initialize logging for the application.
-    Creates a 'logs' folder in the output directory.
-    
-    Args:
-        output_folder: Folder to store log files
-    """
-    log_folder = os.path.join(output_folder, 'logs')
-    os.makedirs(log_folder, exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_folder, f"process_log_{timestamp}.txt")
-    
-    # Configure basic logging
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-    
-    # Add console handler for visibility
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    
-    root_logger = logging.getLogger()
-    root_logger.addHandler(console_handler)
-    
-    print(f"Logging to: {log_file}")
-
-
-def get_logger(name: str, context: Optional[Dict[str, Any]] = None) -> StructuredLogger:
-    """
-    Get a structured logger with the given name and context.
-    
-    Args:
-        name: Logger name
-        context: Optional context dictionary
-        
-    Returns:
-        StructuredLogger instance
-    """
-    return StructuredLogger(name, context)
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/pdf_processor.py
-```py
-"""
-PDF processing utilities that leverage the extraction service.
-"""
-import os
-import json
-import logging
-from typing import Dict, Any, Tuple, Optional
-
-from services.extraction_service import PyMuPdfExtractor, ExtractionResult
-from services.ai_service import DrawingAiService, AiResponse, ModelType
-
-
-async def extract_text_and_tables_from_pdf(pdf_path: str) -> str:
-    """
-    Extract text and tables from a PDF file.
-    This is a legacy wrapper around the new extraction service.
-    
-    Args:
-        pdf_path: Path to the PDF file
-        
-    Returns:
-        Extracted content as a string
-    """
-    extractor = PyMuPdfExtractor()
-    result = await extractor.extract(pdf_path)
-    
-    all_content = ""
-    if result.success:
-        all_content += "TEXT:\n" + result.raw_text + "\n"
-        
-        for table in result.tables:
-            all_content += "TABLE:\n"
-            all_content += table["content"] + "\n"
-    
-    return all_content
-
-
-async def structure_panel_data(client, raw_content: str) -> Dict[str, Any]:
-    """
-    Structure panel data using the AI service.
-    
-    Args:
-        client: OpenAI client
-        raw_content: Raw content from the panel PDF
-        
-    Returns:
-        Structured panel data as a dictionary
-    """
-    from utils.drawing_processor import DRAWING_INSTRUCTIONS
-    
-    ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
-    
-    system_message = """
-    You are an expert in electrical engineering and panel schedules. 
-    Please structure the following content from an electrical panel schedule into a valid JSON format. 
-    The content includes both text and tables. Extract key information such as panel name, voltage, amperage, circuits, 
-    and any other relevant details.
-    Pay special attention to the tabular data, which represents circuit information.
-    Ensure your entire response is a valid JSON object.
-    """
-    
-    response = await ai_service.process_drawing(
-        raw_content=raw_content,
-        drawing_type="Electrical",
-        temperature=0.2,
-        max_tokens=2000,
-        model_type=ModelType.GPT_4O_MINI
-    )
-    
-    if response.success and response.parsed_content:
-        return response.parsed_content
-    else:
-        logging.error(f"Failed to structure panel data: {response.error}")
-        raise Exception(f"Failed to structure panel data: {response.error}")
-
-
-async def process_pdf(pdf_path: str, output_folder: str, client) -> Tuple[str, Dict[str, Any]]:
-    """
-    Process a PDF file and save the structured data.
-    
-    Args:
-        pdf_path: Path to the PDF file
-        output_folder: Folder to save the output
-        client: OpenAI client
-        
-    Returns:
-        Tuple of (raw_content, structured_data)
-    """
-    from services.storage_service import FileSystemStorage
-    
-    print(f"Processing PDF: {pdf_path}")
-    extractor = PyMuPdfExtractor()
-    storage = FileSystemStorage()
-    
-    # Extract content
-    extraction_result = await extractor.extract(pdf_path)
-    if not extraction_result.success:
-        raise Exception(f"Failed to extract content: {extraction_result.error}")
-    
-    # Convert to the format expected by structure_panel_data
-    raw_content = ""
-    raw_content += "TEXT:\n" + extraction_result.raw_text + "\n"
-    for table in extraction_result.tables:
-        raw_content += "TABLE:\n"
-        raw_content += table["content"] + "\n"
-    
-    # Structure data
-    structured_data = await structure_panel_data(client, raw_content)
-    
-    # Save the result
-    panel_name = structured_data.get('panel_name', 'unknown_panel').replace(" ", "_").lower()
-    filename = f"{panel_name}_electric_panel.json"
-    filepath = os.path.join(output_folder, filename)
-    
-    await storage.save_json(structured_data, filepath)
-    
-    print(f"Saved structured panel data: {filepath}")
-    return raw_content, structured_data
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/pdf_utils.py
-```py
-"""
-PDF processing utilities that directly use PyMuPDF.
-This module is being phased out in favor of the extraction service.
-"""
-import pymupdf as fitz
-import logging
-import aiofiles
-from typing import List, Dict, Any, Optional, Tuple
-import os
-
-logger = logging.getLogger(__name__)
-
-async def extract_text(file_path: str) -> str:
-    """
-    Extract text from a PDF file using PyMuPDF.
-    Consider using the extraction service instead.
-    
-    Args:
-        file_path: Path to the PDF file
-        
-    Returns:
-        Extracted text
-    """
-    logger.info(f"Starting text extraction for {file_path}")
-    if not os.path.exists(file_path):
-        logger.error(f"File not found: {file_path}")
-        raise FileNotFoundError(f"File not found: {file_path}")
-        
-    try:
-        with fitz.open(file_path) as doc:
-            logger.info(f"Successfully opened {file_path}")
-            text = ""
-            for i, page in enumerate(doc):
-                logger.info(f"Processing page {i+1} of {len(doc)}")
-                page_text = page.get_text()
-                if page_text:
-                    text += page_text + "\n"
-                else:
-                    logger.warning(f"No text extracted from page {i+1}")
-        
-        if not text:
-            logger.warning(f"No text extracted from {file_path}")
-        else:
-            logger.info(f"Successfully extracted text from {file_path}")
-        
-        return text
-    except Exception as e:
-        logger.error(f"Error extracting text from {file_path}: {str(e)}")
-        raise
-
-async def extract_images(file_path: str) -> List[Dict[str, Any]]:
-    """
-    Extract images from a PDF file using PyMuPDF.
-    Consider using the extraction service instead.
-    
-    Args:
-        file_path: Path to the PDF file
-        
-    Returns:
-        List of image metadata dictionaries
-    """
-    if not os.path.exists(file_path):
-        logger.error(f"File not found: {file_path}")
-        raise FileNotFoundError(f"File not found: {file_path}")
-        
-    try:
-        images = []
-        with fitz.open(file_path) as doc:
-            for page_index, page in enumerate(doc):
-                image_list = page.get_images(full=True)
-                for img_index, img in enumerate(image_list):
-                    xref = img[0]
-                    base_image = doc.extract_image(xref)
-                    
-                    # PyMuPDF doesn't directly provide bounding box for images
-                    # We'd need to process rect information from the page
-                    # For compatibility, we'll create a similar structure to pdfplumber
-                    
-                    images.append({
-                        'page': page_index + 1,
-                        'bbox': (0, 0, base_image["width"], base_image["height"]),  # Placeholder bbox
-                        'width': base_image["width"],
-                        'height': base_image["height"],
-                        'type': base_image["ext"]  # Image extension/type
-                    })
-        
-        logger.info(f"Extracted {len(images)} images from {file_path}")
-        return images
-    except Exception as e:
-        logger.error(f"Error extracting images from {file_path}: {str(e)}")
-        raise
-
-async def get_pdf_metadata(file_path: str) -> Dict[str, Any]:
-    """
-    Get metadata from a PDF file using PyMuPDF.
-    Consider using the extraction service instead.
-    
-    Args:
-        file_path: Path to the PDF file
-        
-    Returns:
-        PDF metadata dictionary
-    """
-    if not os.path.exists(file_path):
-        logger.error(f"File not found: {file_path}")
-        raise FileNotFoundError(f"File not found: {file_path}")
-        
-    try:
-        with fitz.open(file_path) as doc:
-            # Convert PyMuPDF metadata format to match pdfplumber's format
-            metadata = {
-                "title": doc.metadata.get("title", ""),
-                "author": doc.metadata.get("author", ""),
-                "subject": doc.metadata.get("subject", ""),
-                "creator": doc.metadata.get("creator", ""),
-                "producer": doc.metadata.get("producer", ""),
-                "creationDate": doc.metadata.get("creationDate", ""),
-                "modDate": doc.metadata.get("modDate", "")
-            }
-        logger.info(f"Successfully extracted metadata from {file_path}")
-        return metadata
-    except Exception as e:
-        logger.error(f"Error extracting metadata from {file_path}: {str(e)}")
-        raise
-
-async def save_page_as_image(file_path: str, page_num: int, output_path: str, dpi: int = 300) -> str:
-    """
-    Save a PDF page as an image.
-    
-    Args:
-        file_path: Path to the PDF file
-        page_num: Page number to extract (0-based)
-        output_path: Path to save the image
-        dpi: DPI for the rendered image (default: 300)
-        
-    Returns:
-        Path to the saved image
-        
-    Raises:
-        FileNotFoundError: If the file does not exist
-        IndexError: If the page number is out of range
-        Exception: For any other errors during extraction
-    """
-    if not os.path.exists(file_path):
-        logger.error(f"File not found: {file_path}")
-        raise FileNotFoundError(f"File not found: {file_path}")
-        
-    try:
-        with fitz.open(file_path) as doc:
-            if page_num < 0 or page_num >= len(doc):
-                raise IndexError(f"Page number {page_num} out of range (0-{len(doc)-1})")
-                
-            page = doc[page_num]
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
-            pixmap.save(output_path)
-            
-            logger.info(f"Saved page {page_num} as image: {output_path}")
-            return output_path
-    except Exception as e:
-        logger.error(f"Error saving page as image: {str(e)}")
-        raise
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/performance_utils.py
-```py
-"""
-Performance tracking utilities.
-"""
-import time
-import asyncio
-import logging
-import os
-from typing import Dict, Any, List, Tuple, Callable, Optional, TypeVar, Coroutine
-from functools import wraps
-
-T = TypeVar('T')
-
-
-class PerformanceTracker:
-    """
-    Tracks performance metrics for different operations.
-    """
-    def __init__(self):
-        self.metrics = {
-            "extraction": [],
-            "ai_processing": [],
-            "total_processing": []
-        }
-        self.logger = logging.getLogger(__name__)
-        
-    def add_metric(self, category: str, file_name: str, drawing_type: str, duration: float):
-        """
-        Add a performance metric.
-        
-        Args:
-            category: Category of the operation (extraction, ai_processing, etc.)
-            file_name: Name of the file being processed
-            drawing_type: Type of drawing
-            duration: Duration in seconds
-        """
-        if category not in self.metrics:
-            self.metrics[category] = []
-            
-        self.metrics[category].append({
-            "file_name": file_name,
-            "drawing_type": drawing_type,
-            "duration": duration
-        })
-        
-    def get_average_duration(self, category: str, drawing_type: Optional[str] = None) -> float:
-        """
-        Get the average duration for a category.
-        
-        Args:
-            category: Category of the operation
-            drawing_type: Optional drawing type filter
-            
-        Returns:
-            Average duration in seconds
-        """
-        if category not in self.metrics:
-            return 0.0
-            
-        metrics = self.metrics[category]
-        if drawing_type:
-            metrics = [m for m in metrics if m["drawing_type"] == drawing_type]
-            
-        if not metrics:
-            return 0.0
-            
-        return sum(m["duration"] for m in metrics) / len(metrics)
-        
-    def get_slowest_operations(self, category: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """
-        Get the slowest operations for a category.
-        
-        Args:
-            category: Category of the operation
-            limit: Maximum number of results
-            
-        Returns:
-            List of slow operations
-        """
-        if category not in self.metrics:
-            return []
-            
-        return sorted(
-            self.metrics[category],
-            key=lambda m: m["duration"],
-            reverse=True
-        )[:limit]
-        
-    def report(self):
-        """
-        Generate a report of performance metrics.
-        
-        Returns:
-            Dictionary of performance reports
-        """
-        report = {}
-        
-        for category in self.metrics:
-            if not self.metrics[category]:
-                continue
-                
-            # Get overall average
-            overall_avg = self.get_average_duration(category)
-            
-            # Get averages by drawing type
-            drawing_types = set(m["drawing_type"] for m in self.metrics[category])
-            type_averages = {
-                dt: self.get_average_duration(category, dt)
-                for dt in drawing_types
-            }
-            
-            # Get slowest operations
-            slowest = self.get_slowest_operations(category, 5)
-            
-            report[category] = {
-                "overall_average": overall_avg,
-                "by_drawing_type": type_averages,
-                "slowest_operations": slowest,
-                "total_operations": len(self.metrics[category])
-            }
-            
-        return report
-        
-    def log_report(self):
-        """
-        Log the performance report.
-        """
-        report = self.report()
-        
-        self.logger.info("=== Performance Report ===")
-        
-        for category, data in report.items():
-            self.logger.info(f"Category: {category}")
-            self.logger.info(f"  Overall average: {data['overall_average']:.2f}s")
-            self.logger.info(f"  Total operations: {data['total_operations']}")
-            
-            self.logger.info("  By drawing type:")
-            for dt, avg in data['by_drawing_type'].items():
-                self.logger.info(f"    {dt}: {avg:.2f}s")
-                
-            self.logger.info("  Slowest operations:")
-            for op in data['slowest_operations']:
-                self.logger.info(f"    {op['file_name']} ({op['drawing_type']}): {op['duration']:.2f}s")
-                
-        self.logger.info("==========================")
-
-
-# Create a global instance
-tracker = PerformanceTracker()
-
-
-def time_operation(category: str):
-    """
-    Decorator to time an operation and add it to the tracker.
-    
-    Args:
-        category: Category of the operation
-    """
-    def decorator(func):
-        # Define common parameter names here so they're available to both wrappers
-        file_params = ["pdf_path", "file_path", "path"]
-        type_params = ["drawing_type", "type"]
-        
-        @wraps(func)
-        async def async_wrapper(*args, **kwargs):
-            # Try to determine file name and drawing type from args/kwargs
-            file_name = "unknown"
-            drawing_type = "unknown"
-            
-            # Check positional args - this is a heuristic and may need adjustment
-            if len(args) > 0 and isinstance(args[0], str) and args[0].endswith(".pdf"):
-                file_name = os.path.basename(args[0])
-            
-            if len(args) > 2 and isinstance(args[2], str):
-                drawing_type = args[2]
-                
-            # Check keyword args
-            for param in file_params:
-                if param in kwargs and isinstance(kwargs[param], str):
-                    file_name = os.path.basename(kwargs[param])
-                    break
-                    
-            for param in type_params:
-                if param in kwargs and isinstance(kwargs[param], str):
-                    drawing_type = kwargs[param]
-                    break
-            
-            start_time = time.time()
-            try:
-                result = await func(*args, **kwargs)
-                return result
-            finally:
-                duration = time.time() - start_time
-                tracker.add_metric(category, file_name, drawing_type, duration)
-                
-        @wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            # Similar logic as async_wrapper for file_name and drawing_type
-            file_name = "unknown"
-            drawing_type = "unknown"
-            
-            # Check positional args
-            if len(args) > 0 and isinstance(args[0], str) and args[0].endswith(".pdf"):
-                file_name = os.path.basename(args[0])
-            
-            if len(args) > 2 and isinstance(args[2], str):
-                drawing_type = args[2]
-                
-            # Check keyword args
-            for param in file_params:
-                if param in kwargs and isinstance(kwargs[param], str):
-                    file_name = os.path.basename(kwargs[param])
-                    break
-                    
-            for param in type_params:
-                if param in kwargs and isinstance(kwargs[param], str):
-                    drawing_type = kwargs[param]
-                    break
-            
-            start_time = time.time()
-            try:
-                result = func(*args, **kwargs)
-                return result
-            finally:
-                duration = time.time() - start_time
-                tracker.add_metric(category, file_name, drawing_type, duration)
-                
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        else:
-            return sync_wrapper
-            
-    return decorator
-
-
-# Get the global tracker
-def get_tracker() -> PerformanceTracker:
-    """
-    Get the global performance tracker.
-    
-    Returns:
-        Global PerformanceTracker instance
-    """
-    return tracker 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/file_utils.py
-```py
-import os
-import logging
-from typing import List
-
-logger = logging.getLogger(__name__)
-
-def traverse_job_folder(job_folder: str) -> List[str]:
-    """
-    Traverse the job folder and collect all PDF files.
-    """
-    pdf_files = []
-    try:
-        for root, _, files in os.walk(job_folder):
-            for file in files:
-                if file.lower().endswith('.pdf'):
-                    pdf_files.append(os.path.join(root, file))
-        logger.info(f"Found {len(pdf_files)} PDF files in {job_folder}")
-    except Exception as e:
-        logger.error(f"Error traversing job folder {job_folder}: {str(e)}")
-    return pdf_files
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/.env.example
-```example
-# OpenAI API Configuration
-OPENAI_API_KEY=your_openai_key_here
-
-# Azure Document Intelligence Configuration
-DOCUMENTINTELLIGENCE_ENDPOINT=<yourEndpoint>
-DOCUMENTINTELLIGENCE_API_KEY=<yourKey>
-
-# Optional Configuration
-# LOG_LEVEL=INFO
-# BATCH_SIZE=10
-# API_RATE_LIMIT=60
-# TIME_WINDOW=60 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/room_templates.py
-```py
-import json
-import os
-
-def load_template(template_name):
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(current_dir, f"{template_name}_template.json")
-    try:
-        with open(template_path, 'r') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print(f"Template file not found: {template_path}")
-        return {}
-    except json.JSONDecodeError:
-        print(f"Error decoding JSON from file: {template_path}")
-        return {}
-
-def generate_rooms_data(parsed_data, room_type):
-    template = load_template(room_type)
-    
-    metadata = parsed_data.get('metadata', {})
-    
-    rooms_data = {
-        "metadata": metadata,
-        "project_name": metadata.get('project', ''),
-        "floor_number": '',
-        "rooms": []
-    }
-    
-    parsed_rooms = parsed_data.get('rooms', [])
-    
-    if not parsed_rooms:
-        print(f"No rooms found in parsed data for {room_type}.")
-        return rooms_data
-
-    for parsed_room in parsed_rooms:
-        room_number = str(parsed_room.get('number', ''))
-        room_name = parsed_room.get('name', '')
-        
-        if not room_number or not room_name:
-            print(f"Skipping room with incomplete data: {parsed_room}")
-            continue
-        
-        room_data = template.copy()
-        room_data['room_id'] = f"Room_{room_number}"
-        room_data['room_name'] = f"{room_name}_{room_number}"
-        
-        # Copy all fields from parsed_room to room_data
-        for key, value in parsed_room.items():
-            if key not in ['number', 'name']:
-                room_data[key] = value
-        
-        rooms_data['rooms'].append(room_data)
-    
-    return rooms_data
-
-def process_architectural_drawing(parsed_data, file_path, output_folder):
-    """
-    Process architectural drawing data (parsed JSON),
-    and generate both e_rooms and a_rooms JSON outputs.
-    """
-    is_reflected_ceiling = "REFLECTED CEILING PLAN" in file_path.upper()
-    
-    floor_number = ''  # If floor number is available in the future, extract it here
-    
-    e_rooms_data = generate_rooms_data(parsed_data, 'e_rooms')
-    a_rooms_data = generate_rooms_data(parsed_data, 'a_rooms')
-    
-    e_rooms_file = os.path.join(output_folder, f'e_rooms_details_floor_{floor_number}.json')
-    a_rooms_file = os.path.join(output_folder, f'a_rooms_details_floor_{floor_number}.json')
-    
-    with open(e_rooms_file, 'w') as f:
-        json.dump(e_rooms_data, f, indent=2)
-    with open(a_rooms_file, 'w') as f:
-        json.dump(a_rooms_data, f, indent=2)
-    
-    return {
-        "e_rooms_file": e_rooms_file,
-        "a_rooms_file": a_rooms_file,
-        "is_reflected_ceiling": is_reflected_ceiling
-    }
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/main.py
-```py
-import os
-import sys
-import asyncio
-import logging
-import time
-
-from openai import AsyncOpenAI
-from config.settings import OPENAI_API_KEY, get_all_settings
-from utils.logging_utils import setup_logging
-from processing.job_processor import process_job_site_async
-from utils.performance_utils import get_tracker
-
-async def main_async():
-    """
-    Main async function to handle processing with better error handling.
-    """
-    if len(sys.argv) < 2:
-        print("Usage: python main.py <input_folder> [output_folder]")
-        return 1
-    
-    job_folder = sys.argv[1]
-    output_folder = sys.argv[2] if len(sys.argv) > 2 else os.path.join(job_folder, "output")
-    
-    if not os.path.exists(job_folder):
-        print(f"Error: Input folder '{job_folder}' does not exist.")
-        return 1
-    
-    # 1) Set up logging
-    setup_logging(output_folder)
-    logging.info(f"Processing files from: {job_folder}")
-    logging.info(f"Output will be saved to: {output_folder}")
-    logging.info(f"Application settings: {get_all_settings()}")
-    
-    try:
-        # 2) Create OpenAI Client (v1.66.3)
-        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-        
-        # 3) Record start time
-        start_time = time.time()
-        
-        # 4) Run asynchronous job processing
-        await process_job_site_async(job_folder, output_folder, client)
-        
-        # 5) Calculate total processing time
-        total_time = time.time() - start_time
-        logging.info(f"Total processing time: {total_time:.2f} seconds")
-        
-        # 6) Generate performance report
-        tracker = get_tracker()
-        tracker.log_report()
-        
-        return 0
-    except Exception as e:
-        logging.error(f"Unhandled exception in main process: {str(e)}")
-        return 1
-
-if __name__ == "__main__":
-    try:
-        exit_code = asyncio.run(main_async())
-        sys.exit(exit_code)
-    except KeyboardInterrupt:
-        print("\nProcess interrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Fatal error: {str(e)}")
-        sys.exit(1) 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/requirements.txt
-```txt
-# Async utilities
-aiofiles>=23.2.1
-asyncio>=3.4.3
-aiohttp~=3.11
-aiohappyeyeballs~=2.4.4
-aiosignal~=1.3.2
-anyio~=4.8.0
-jiter~=0.8.2
-sniffio~=1.3.1
-
-# HTTP and API clients
-httpx~=0.28.1
-httpcore~=1.0.7
-requests~=2.32.3
-urllib3~=2.2.3
-yarl~=1.17.0
-frozenlist~=1.4.1
-multidict~=6.1.0
-h11~=0.14.0
-
-# OpenAI
-openai~=1.66.3  # For Responses API support
-tiktoken~=0.9.0
-
-# PDF processing
-PyMuPDF~=1.24.11  # For enhanced text extraction formats and DataFrame support
-pypdfium2~=4.30.0
-Wand~=0.6.13
-pandas>=2.0.0  # For PyMuPDF's Table.to_pandas() functionality
-
-# Data validation and type handling
-pydantic~=2.10.5  # Using v2 validation patterns (field_validator)
-pydantic_core~=2.27.2
-typing_extensions~=4.12.2
-annotated-types~=0.7.0
-attrs~=24.3.0
-
-# Utilities
-python-dotenv~=1.0.1
-tqdm~=4.66.5
-tenacity~=9.0.0  # For enhanced retry patterns
-pillow~=10.4.0
-
-# Security and crypto
-certifi~=2024.12.14
-cffi~=1.17.1
-charset-normalizer~=3.4.1
-cryptography~=44.0.0
-pycparser~=2.22
-distro~=1.9.0
-
-# Azure (legacy, maintaining for backward compatibility)
-azure-ai-documentintelligence==1.0.0
-azure-core>=1.32.0
-
-# Testing
-pytest~=7.4.0
-pytest-asyncio~=0.21.1  # For testing asynchronous functions
-pytest-cov~=4.1.0  # For test coverage
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/backup/prompts.py
-```py
-# utils/prompts.py
-
-UNIFIED_PROMPT = """
-You are an expert in analyzing construction drawings and specifications. I'm providing you with extracted text and tables from a construction document.
-
-DOCUMENT TYPE: {drawing_type}
-FILENAME: {file_name}
-
-Your task is to organize ALL of this information into a well-structured JSON format. The exact structure should be based on the content type:
-
-1. For SPECIFICATIONS (like electrical specs):
-   - Capture ALL sections, subsections, paragraphs, and list items
-   - Preserve the hierarchical structure (sections, parts, clauses)
-   - Include ALL text content - don't summarize or skip anything
-   - For electrical specifications, include information about materials, methods, and requirements
-   - Create a normalized structure with consistent key names (e.g., 'section_id', 'section_title', 'content')
-   - Preserve all references to standards, codes, and regulations (e.g., NEC, ASTM, NFPA)
-
-2. For SCHEDULES (equipment, panel, fixture schedules):
-   - Create structured arrays for each schedule type
-   - Maintain consistent field names across similar items
-   - Standardize field names (use 'load_name' not "description"/"load", use 'trip' not "ocp"/"amperage")
-   - For panel schedules, include panel details (name, voltage, phases, main_type, mounting, bus_rating) and circuit information
-   - For mechanical schedules, include equipment details (type, model, capacity, connection_requirements, airflow)
-   - For plumbing schedules, include fixture details (fixture_type, connection_sizes, flow_rates, pressure_requirements)
-   - Always include room_id references when available to link equipment to specific rooms
-   - Preserve manufacturer information, part numbers, and model numbers exactly as specified
-
-3. For ARCHITECTURAL DRAWINGS:
-   - Create a 'rooms' array with comprehensive room information (room_id, room_name, room_number, area, dimensions)
-   - Include wall types with proper structure (wall_type_id, composition, fire_rating, acoustic_properties, thickness)
-   - Structure door schedules with comprehensive details (door_id, door_type, material, hardware_set, dimensions, fire_rating)
-   - Include window schedules and opening information (window_id, window_type, dimensions, glazing, operation_type)
-   - Capture finish schedules and material specifications (floor, wall, ceiling finishes with manufacturer and model)
-   - Document ceiling types and heights for each room
-   - Include furniture and equipment layouts when present
-   - Capture accessibility requirements and clearances
-
-4. For ELECTRICAL DRAWINGS:
-   - Include 'panels' array for panel schedules with complete circuit information (circuit_id, load_description, load_type, amperage, poles)
-   - Structure 'lighting_fixtures' array for fixture schedules (fixture_type, manufacturer, model, wattage, lamp_type, mounting)
-   - Capture circuit information in structured format (circuit_number, description, connected_load, demand_load, voltage)
-   - Include device specifications (switches, sensors, receptacles) with model numbers and locations
-   - Document home runs and circuit connections between panels (source_panel, circuit_number, destination)
-   - Capture keynotes and general notes related to electrical installation
-   - Include riser diagrams information (feeders, conduit sizes, wire sizes)
-   - Document emergency power systems and connections
-   - Capture lighting control systems and zoning information
-
-5. For MECHANICAL DRAWINGS:
-   - Structure 'equipment' array for HVAC units (equipment_id, equipment_type, model, capacity, connections, electrical_requirements)
-   - Include 'air_outlets' details (outlet_id, outlet_type, airflow, size, model, location)
-   - Document ductwork specifications and sizing (duct_size, material, insulation, pressure_class)
-   - Capture ventilation requirements per room (air_changes, cfm, exhaust_requirements)
-   - Include mechanical equipment connections to electrical panels (panel_id, circuit_id, load)
-   - Document temperature control systems and zoning
-   - Include equipment schedules with all performance metrics
-   - Capture system pressure, flow rates, and balance points
-   - Document noise criteria and vibration isolation requirements
-
-6. For PLUMBING DRAWINGS:
-   - Structure 'fixtures' array with detailed specifications (fixture_id, fixture_type, manufacturer, model, connections)
-   - Include pipe sizing and material information (pipe_type, size, material, insulation, slope)
-   - Document water heater and pump specifications (capacity, flow_rate, pressure, electrical_requirements)
-   - Capture drainage system details (drain_size, slope, cleanout_locations)
-   - Include fixture connection requirements (hot_water_size, cold_water_size, waste_size, vent_size)
-   - Document water supply system information (pressure, flow, backflow prevention)
-   - Capture sanitary and vent riser information
-   - Include special systems (medical gas, compressed air, vacuum)
-
-7. For FIRE PROTECTION DRAWINGS:
-   - Structure 'sprinklers' array with details (sprinkler_type, coverage, k_factor, temperature_rating)
-   - Include pipe sizes and materials specific to fire protection
-   - Document fire alarm devices and connections
-   - Capture fire suppression systems and specifications
-   - Include hydraulic calculations and design criteria
-
-8. For SITE AND CIVIL DRAWINGS:
-   - Capture grading information and elevations
-   - Include utility connections and routing
-   - Document site lighting specifications
-   - Structure parking and paving details
-   - Include landscape elements and specifications
-
-IMPORTANT GUIDELINES:
-- Include a comprehensive 'metadata' section with drawing_number, title, date, scale, revision_number, etc.
-- NEVER truncate or summarize content - capture EVERYTHING in structured format
-- Use consistent field names and standardize across similar items (use singular_noun for field names with snake_case)
-- Create logical hierarchical structure based on the document's organization
-- Maintain original terminology, numbering, and values from the document
-- When a room has equipment or fixtures, include both the equipment_id and room_id to enable cross-referencing
-- For circuit connections, always include the source_panel and circuit_number
-- Format your entire response as a single valid JSON object
-- For all drawings, capture ALL keynotes, general notes, and references
-- Ensure proper nesting of related information (e.g., a panel contains circuits, a room contains fixtures)
-- Use standard JSON data types appropriately (strings, numbers, booleans, arrays, objects)
-- When dimensions are present, separate numeric values from units (e.g., {"value": 24, "unit": "inches"})
-- Normalize technical terminology throughout the document
-- Handle abbreviations consistently (either preserve as-is or expand to full terms)
-- When information appears to be missing, use null rather than empty strings
-- Identify and handle duplicate information appropriately (create references rather than duplicating)
-- Ensure all IDs are unique and follow a consistent pattern within their category
-
-Your response MUST be valid JSON with no explanatory text outside the JSON structure.
-"""
-
-# Keep this dictionary but replace individual prompts with the unified one
-PROMPTS = {
-    "architectural": UNIFIED_PROMPT,
-    "electrical": UNIFIED_PROMPT,
-    "mechanical": UNIFIED_PROMPT,
-    "plumbing": UNIFIED_PROMPT,
-    "fire_protection": UNIFIED_PROMPT,
-    "civil": UNIFIED_PROMPT,
-    "structural": UNIFIED_PROMPT,
-    "landscape": UNIFIED_PROMPT,
-    "default": UNIFIED_PROMPT,
-    "electrical_panel_schedule": UNIFIED_PROMPT,
-    "mechanical_schedule": UNIFIED_PROMPT,
-    "plumbing_schedule": UNIFIED_PROMPT,
-    "architectural_schedule": UNIFIED_PROMPT
-}
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/file_processor.py
-```py
-import os
-import json
-import logging
-from tqdm.asyncio import tqdm
-from dotenv import load_dotenv
-from typing import Dict, Any
-
-from services.extraction_service import create_extractor
-from services.ai_service import DrawingAiService
-from services.storage_service import FileSystemStorage
-from utils.performance_utils import time_operation
-from utils.constants import get_drawing_type
-
-# Load environment variables
-load_dotenv()
-
-@time_operation("total_processing")
-async def process_pdf_async(
-    pdf_path: str,
-    client,
-    output_folder: str,
-    drawing_type: str,
-    templates_created: Dict[str, bool]
-) -> Dict[str, Any]:
-    """
-    Process a single PDF asynchronously:
-    1) Extract text and tables from PDF
-    2) Process with AI using universal prompt
-    3) Save structured JSON output
-    """
-    file_name = os.path.basename(pdf_path)
-    logger = logging.getLogger(__name__)
-
-    with tqdm(total=100, desc=f"Processing {file_name}", leave=False) as pbar:
-        try:
-            pbar.update(10)
-            extractor = create_extractor(drawing_type, logger)
-            storage = FileSystemStorage(logger)
-            ai_service = DrawingAiService(client, logger)
-
-            extraction_result = await extractor.extract(pdf_path)
-            if not extraction_result.success:
-                pbar.update(100)
-                logger.error(f"Extraction failed for {pdf_path}: {extraction_result.error}")
-                return {"success": False, "error": extraction_result.error, "file": pdf_path}
-
-            raw_content = extraction_result.raw_text
-            for table in extraction_result.tables:
-                raw_content += f"\nTABLE:\n{table['content']}\n"
-            pbar.update(20)
-
-            structured_json = await ai_service.process_with_prompt(raw_content)
-            pbar.update(40)
-
-            type_folder = os.path.join(output_folder, drawing_type)
-            os.makedirs(type_folder, exist_ok=True)
-
-            try:
-                parsed_json = json.loads(structured_json)
-            except json.JSONDecodeError as e:
-                pbar.update(100)
-                logger.error(f"JSON error for {pdf_path}: {str(e)}")
-                raw_output_path = os.path.join(type_folder, f"{os.path.splitext(file_name)[0]}_raw_response.json")
-                await storage.save_text(structured_json, raw_output_path)
-                return {"success": False, "error": f"JSON parse failed: {str(e)}", "file": pdf_path}
-
-            output_path = os.path.join(type_folder, f"{os.path.splitext(file_name)[0]}_structured.json")
-            await storage.save_json(parsed_json, output_path)
-            pbar.update(20)
-            logger.info(f"Saved: {output_path}")
-
-            if drawing_type == 'Architectural' and 'rooms' in parsed_json:
-                from templates.room_templates import process_architectural_drawing
-                result = process_architectural_drawing(parsed_json, pdf_path, type_folder)
-                templates_created['floor_plan'] = True
-                logger.info(f"Created templates: {result}")
-
-            pbar.update(10)
-            return {"success": True, "file": output_path}
-        except Exception as e:
-            pbar.update(100)
-            logger.error(f"Error processing {pdf_path}: {str(e)}")
-            return {"success": False, "error": str(e), "file": pdf_path}
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/ai_service.py
-```py
-import json
-import logging
-from enum import Enum
-from typing import Dict, Any, Optional
-from openai import AsyncOpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from utils.performance_utils import time_operation
-
-class ModelType(Enum):
-    """Enumeration of supported AI model types."""
-    GPT_4O_MINI = "gpt-4o-mini-2024-07-18"
-
-class DrawingAiService:
-    """
-    Specialized AI service for processing construction drawings.
-    """
-    def __init__(self, client: AsyncOpenAI, logger: Optional[logging.Logger] = None):
-        """
-        Initialize the DrawingAiService.
-
-        Args:
-            client: AsyncOpenAI client instance
-            logger: Optional logger instance
-        """
-        self.client = client
-        self.logger = logger or logging.getLogger(__name__)
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(Exception)
-    )
-    @time_operation("ai_processing")
-    async def process_with_prompt(
-        self,
-        raw_content: str,
-        temperature: float = 0.2,
-        max_tokens: int = 16000,
-        model_type: ModelType = ModelType.GPT_4O_MINI,
-        system_message: Optional[str] = None
-    ) -> str:
-        """
-        Process a construction drawing using a specific prompt.
-
-        Args:
-            raw_content: Raw content from the drawing
-            temperature: Temperature parameter for the AI model
-            max_tokens: Maximum tokens to generate
-            model_type: AI model type to use
-            system_message: Optional custom system message to override default
-
-        Returns:
-            Processed content as a JSON string
-
-        Raises:
-            JSONDecodeError: If the response is not valid JSON
-            ValueError: If the JSON structure is invalid
-            Exception: For other processing errors
-        """
-        default_system_message = """
-        You are an AI assistant tasked with processing construction drawings. Your job is to extract all relevant information from the provided content and organize it into a structured JSON object with the following sections:
-
-        - "metadata": An object containing drawing metadata such as "drawing_number", "title", "date", and "revision". Include any available information; if a field is missing, omit it.
-
-        - "schedules": An array of schedule objects. Each schedule should have a "type" (e.g., "electrical_panel", "mechanical") and a "data" array containing objects with standardized field names. For example, use "load_name" for fields like "Load" or "Load Type", and "trip" for "Breaker Size" or "Amperage". If a field doesn't match a standard name, include it as-is.
-
-        - "notes": An array of strings containing any notes or instructions found in the drawing.
-
-        - "specifications": An array of objects, each with a "section_title" and "content" for specification sections.
-        
-        - "rooms": For architectural drawings, include an array of rooms with 'number', 'name', 'electrical_info', and 'architectural_info'.
-
-        IMPORTANT: For architectural drawings, ALWAYS include a 'rooms' array, even if you have to infer room information from context.
-        
-        Ensure that the entire response is a single, valid JSON object. Do not include any additional text or explanations outside of the JSON.
-        """
-
-        # Use the provided system message or fall back to default
-        final_system_message = system_message if system_message else default_system_message
-
-        try:
-            response = await self.client.chat.completions.create(
-                model=model_type.value,
-                messages=[
-                    {"role": "system", "content": final_system_message},
-                    {"role": "user", "content": raw_content}
-                ],
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            content = response.choices[0].message.content
-            parsed_content = json.loads(content)
-            if not self.validate_json(parsed_content):
-                raise ValueError("Invalid JSON structure: missing required keys")
-            return content
-        except json.JSONDecodeError as e:
-            self.logger.error(f"JSON decoding error: {str(e)}")
-            raise
-        except Exception as e:
-            self.logger.error(f"Error processing drawing: {str(e)}")
-            raise
-
-    def validate_json(self, json_data: Dict[str, Any]) -> bool:
-        """
-        Validate the JSON structure.
-
-        Args:
-            json_data: Parsed JSON data
-
-        Returns:
-            True if the JSON has all required keys, False otherwise
-        """
-        required_keys = ["metadata", "schedules", "notes", "specifications"]
-        return all(key in json_data for key in required_keys)
 ```
 
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/job_processor.py
@@ -2206,6 +335,843 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
             for failure in failures:
                 logger.warning(f"  {failure['file']}: {failure.get('error', 'Unknown error')}")
 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/panel_schedule_processor.py
+```py
+import os
+import json
+import logging
+from typing import Dict, Any, List
+from tqdm.asyncio import tqdm
+
+from services.extraction_service import PyMuPdfExtractor
+from services.storage_service import FileSystemStorage
+from services.ai_service import DrawingAiService, AiRequest, ModelType
+
+# If you have a performance decorator, you can add it here if desired
+# from utils.performance_utils import time_operation
+
+def split_text_into_chunks(text: str, chunk_size: int = None) -> List[str]:
+    """
+    Returns the full text as a single chunk with no splitting.
+    
+    Args:
+        text: The text to process
+        chunk_size: Ignored parameter (kept for backwards compatibility)
+        
+    Returns:
+        List with a single item containing the full text
+    """
+    return [text]
+
+def normalize_panel_data_fields(panel_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Unify synonyms in GPT's JSON:
+      - 'description', 'loadType' => 'load_name'
+      - 'ocp', 'amperage', 'breaker_size' => 'trip'
+      - 'circuit_no', 'circuit_number' => 'circuit'
+    """
+    circuits = panel_data.get("circuits", [])
+    new_circuits = []
+
+    for cdict in circuits:
+        c = dict(cdict)
+        # load_name synonyms
+        if "description" in c and "load_name" not in c:
+            c["load_name"] = c.pop("description")
+        if "loadType" in c and "load_name" not in c:
+            c["load_name"] = c.pop("loadType")
+
+        # trip synonyms
+        if "ocp" in c and "trip" not in c:
+            c["trip"] = c.pop("ocp")
+        if "breaker_size" in c and "trip" not in c:
+            c["trip"] = c.pop("breaker_size")
+        if "amperage" in c and "trip" not in c:
+            c["trip"] = c.pop("amperage")
+        if "amp" in c and "trip" not in c:
+            c["trip"] = c.pop("amp")
+
+        # circuit synonyms
+        if "circuit_no" in c and "circuit" not in c:
+            c["circuit"] = c.pop("circuit_no")
+        if "circuit_number" in c and "circuit" not in c:
+            c["circuit"] = c.pop("circuit_number")
+
+        new_circuits.append(c)
+
+    panel_data["circuits"] = new_circuits
+    return panel_data
+
+async def process_panel_schedule_pdf_async(
+    pdf_path: str,
+    client,
+    output_folder: str,
+    drawing_type: str
+) -> Dict[str, Any]:
+    """
+    Specialized function for panel schedules:
+    1) Extract with PyMuPDF
+    2) If any tables found, parse them chunk-by-chunk
+    3) If no tables, fallback to raw text chunking
+    4) Merge partial results & synonyms
+    5) Save final JSON to output_folder/drawing_type
+    """
+    logger = logging.getLogger(__name__)
+    file_name = os.path.basename(pdf_path)
+
+    extractor = PyMuPdfExtractor(logger=logger)
+    storage = FileSystemStorage(logger=logger)
+
+    with tqdm(total=100, desc=f"[PanelSchedules] {file_name}", leave=False) as pbar:
+        try:
+            extraction_result = await extractor.extract(pdf_path)
+            pbar.update(10)
+            if not extraction_result.success:
+                err = f"Extraction failed: {extraction_result.error}"
+                logger.error(err)
+                return {"success": False, "error": err, "file": pdf_path}
+
+            tables = extraction_result.tables
+            raw_text = extraction_result.raw_text
+
+            if tables:
+                logger.info(f"Found {len(tables)} table(s) in {file_name}. Using table-based parsing.")
+                panels_data = await _parse_tables_chunked(tables, client, logger)
+            else:
+                logger.warning(f"No tables found in {file_name}—fallback to raw text approach.")
+                panels_data = await _fallback_raw_text(raw_text, client, logger)
+
+            pbar.update(60)
+            if not panels_data:
+                logger.warning(f"No panel data extracted from {file_name}.")
+                return {"success": True, "file": pdf_path, "panel_schedule": True, "data": []}
+
+            # Now we place the final JSON in output_folder/drawing_type
+            type_folder = os.path.join(output_folder, drawing_type)
+            os.makedirs(type_folder, exist_ok=True)
+
+            base_name = os.path.splitext(file_name)[0]
+            output_filename = f"{base_name}_panel_schedules.json"
+            output_path = os.path.join(type_folder, output_filename)
+
+            await storage.save_json(panels_data, output_path)
+            pbar.update(30)
+
+            logger.info(f"Saved panel schedules to {output_path}")
+            pbar.update(10)
+
+            return {
+                "success": True,
+                "file": output_path,
+                "panel_schedule": True,
+                "data": panels_data
+            }
+
+        except Exception as ex:
+            pbar.update(100)
+            logger.error(f"Unhandled error processing panel schedule {pdf_path}: {str(ex)}")
+            return {"success": False, "error": str(ex), "file": pdf_path}
+
+async def _parse_tables_chunked(tables: List[Dict[str, Any]], client, logger: logging.Logger) -> List[Dict[str, Any]]:
+    """
+    Process each table's markdown as a complete unit - no chunking.
+    Returns a list of panel objects (one per table).
+    """
+    from services.ai_service import AiRequest
+
+    ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
+    all_panels = []
+
+    system_prompt = """
+You are an advanced electrical-engineering assistant. I'm giving you a table from a panel schedule in Markdown form.
+Synonyms:
+  - 'Load', 'Load Type', 'Description' => 'load_name'
+  - 'Trip', 'OCP', 'Breaker Size', 'Amperage', 'Amp' => 'trip'
+  - 'Circuit No', 'Circuit Number' => 'circuit'
+Return valid JSON like:
+{
+  "panel_name": "...",
+  "panel_metadata": {},
+  "circuits": [
+    { "circuit": "...", "load_name": "...", "trip": "...", "poles": "...", ... }
+  ]
+}
+Do not skip any circuit rows. If missing data, leave blank.
+    """.strip()
+
+    for i, tbl_info in enumerate(tables):
+        table_md = tbl_info["content"]
+        if not table_md.strip():
+            logger.debug(f"Skipping empty table {i}.")
+            continue
+
+        # Process the entire table as a single unit - NO CHUNKING
+        user_text = f"FULL TABLE:\n{table_md}"
+
+        request = AiRequest(
+            content=user_text,
+            model_type=ModelType.GPT_4O_MINI,
+            temperature=0.2,
+            max_tokens=3000,
+            system_message=system_prompt
+        )
+
+        response = await ai_service.process(request)
+        if not response.success or not response.content:
+            logger.warning(f"GPT parse error on table {i}: {response.error}")
+            continue
+
+        try:
+            panel_json = json.loads(response.content)
+            # Normalize synonyms
+            panel_json = normalize_panel_data_fields(panel_json)
+            # If we found circuits or a panel name, add it
+            if panel_json.get("panel_name") or panel_json.get("circuits"):
+                all_panels.append(panel_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error (table {i}): {str(e)}")
+
+    return all_panels
+
+async def _fallback_raw_text(raw_text: str, client, logger: logging.Logger) -> List[Dict[str, Any]]:
+    """
+    If no tables found, process the entire raw_text as a single unit.
+    Return a list of one or more panels if discovered.
+    """
+    from services.ai_service import AiRequest
+
+    ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
+
+    fallback_prompt = """
+You are an electrical-engineering assistant. I have raw text from a panel schedule PDF.
+Columns might be unclear. Return JSON like:
+{
+  "panel_name": "...",
+  "panel_metadata": {},
+  "circuits": [
+    { "circuit": "...", "load_name": "...", "trip": "...", "poles": "...", ... }
+  ]
+}
+Do not skip lines that look like circuit data.
+    """.strip()
+
+    # Process the entire content as a single unit - NO CHUNKING
+    user_text = f"FULL RAW TEXT:\n{raw_text}"
+
+    request = AiRequest(
+        content=user_text,
+        model_type=ModelType.GPT_4O_MINI,
+        temperature=0.2,
+        max_tokens=3000,
+        system_message=fallback_prompt
+    )
+
+    response = await ai_service.process(request)
+    if not response.success or not response.content:
+        logger.warning(f"GPT parse error in fallback processing: {response.error}")
+        return []
+
+    try:
+        fallback_data = json.loads(response.content)
+        # Normalize synonyms
+        fallback_data = normalize_panel_data_fields(fallback_data)
+
+        # If no circuits or panel name found, return empty list
+        if not fallback_data.get("panel_name") and not fallback_data.get("circuits"):
+            return []
+
+        return [fallback_data]
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error in fallback processing: {str(e)}")
+        return []
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/__init__.py
+```py
+# Services package initialization 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/file_processor.py
+```py
+import os
+import json
+import logging
+from tqdm.asyncio import tqdm
+from dotenv import load_dotenv
+from typing import Dict, Any
+
+from services.extraction_service import create_extractor
+from services.ai_service import DrawingAiService
+from services.storage_service import FileSystemStorage
+from utils.performance_utils import time_operation
+from utils.constants import get_drawing_type
+
+# Load environment variables
+load_dotenv()
+
+@time_operation("total_processing")
+async def process_pdf_async(
+    pdf_path: str,
+    client,
+    output_folder: str,
+    drawing_type: str,
+    templates_created: Dict[str, bool]
+) -> Dict[str, Any]:
+    """
+    Process a single PDF asynchronously:
+    1) Extract text and tables from PDF
+    2) Process with AI using universal prompt
+    3) Save structured JSON output
+    """
+    file_name = os.path.basename(pdf_path)
+    logger = logging.getLogger(__name__)
+
+    with tqdm(total=100, desc=f"Processing {file_name}", leave=False) as pbar:
+        try:
+            pbar.update(10)
+            extractor = create_extractor(drawing_type, logger)
+            storage = FileSystemStorage(logger)
+            ai_service = DrawingAiService(client, logger)
+
+            extraction_result = await extractor.extract(pdf_path)
+            if not extraction_result.success:
+                pbar.update(100)
+                logger.error(f"Extraction failed for {pdf_path}: {extraction_result.error}")
+                return {"success": False, "error": extraction_result.error, "file": pdf_path}
+
+            # Concatenate all extracted content without any truncation
+            raw_content = extraction_result.raw_text
+            for table in extraction_result.tables:
+                raw_content += f"\nTABLE:\n{table['content']}\n"
+                
+            # Log content length for specification files
+            is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
+            if is_specification:
+                logger.info(f"Processing specification document: {file_name} with {len(raw_content)} characters")
+            else:
+                logger.info(f"Processing {drawing_type} drawing: {file_name} with {len(raw_content)} characters")
+                
+            pbar.update(20)
+
+            # Send the complete raw content to the AI service
+            structured_json = await ai_service.process_with_prompt(raw_content)
+            pbar.update(40)
+
+            type_folder = os.path.join(output_folder, drawing_type)
+            os.makedirs(type_folder, exist_ok=True)
+
+            try:
+                parsed_json = json.loads(structured_json)
+            except json.JSONDecodeError as e:
+                pbar.update(100)
+                logger.error(f"JSON error for {pdf_path}: {str(e)}")
+                raw_output_path = os.path.join(type_folder, f"{os.path.splitext(file_name)[0]}_raw_response.json")
+                await storage.save_text(structured_json, raw_output_path)
+                return {"success": False, "error": f"JSON parse failed: {str(e)}", "file": pdf_path}
+
+            output_path = os.path.join(type_folder, f"{os.path.splitext(file_name)[0]}_structured.json")
+            await storage.save_json(parsed_json, output_path)
+            pbar.update(20)
+            logger.info(f"Saved: {output_path}")
+
+            if drawing_type == 'Architectural' and 'rooms' in parsed_json:
+                from templates.room_templates import process_architectural_drawing
+                result = process_architectural_drawing(parsed_json, pdf_path, type_folder)
+                templates_created['floor_plan'] = True
+                logger.info(f"Created templates: {result}")
+
+            pbar.update(10)
+            return {"success": True, "file": output_path}
+        except Exception as e:
+            pbar.update(100)
+            logger.error(f"Error processing {pdf_path}: {str(e)}")
+            return {"success": False, "error": str(e), "file": pdf_path}
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/ai_service.py
+```py
+import json
+import logging
+from enum import Enum
+from typing import Dict, Any, Optional, TypeVar, Generic
+from openai import AsyncOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from utils.performance_utils import time_operation
+
+class ModelType(Enum):
+    """Enumeration of supported AI model types."""
+    GPT_4O_MINI = "gpt-4o-mini-2024-07-18"
+
+T = TypeVar('T')
+
+class AiRequest:
+    """
+    Class to hold AI API request parameters.
+    """
+    def __init__(
+        self,
+        content: str,
+        model_type: 'ModelType' = None,
+        temperature: float = 0.2,
+        max_tokens: int = 3000,
+        system_message: str = ""
+    ):
+        """
+        Initialize an AiRequest.
+        
+        Args:
+            content: Content to send to the API
+            model_type: Model type to use
+            temperature: Temperature parameter
+            max_tokens: Maximum tokens to generate
+            system_message: System message to use
+        """
+        self.content = content
+        self.model_type = model_type
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.system_message = system_message
+
+class AiResponse(Generic[T]):
+    """
+    Generic class to hold AI API response data or errors.
+    """
+    def __init__(self, success: bool = True, content: str = "", parsed_content: Optional[T] = None, error: str = ""):
+        """
+        Initialize an AiResponse.
+        
+        Args:
+            success: Whether the API call was successful
+            content: Raw content from the API
+            parsed_content: Optional parsed content (of generic type T)
+            error: Error message if the call failed
+        """
+        self.success = success
+        self.content = content
+        self.parsed_content = parsed_content
+        self.error = error
+
+class DrawingAiService:
+    """
+    Specialized AI service for processing construction drawings.
+    """
+    def __init__(self, client: AsyncOpenAI, drawing_instructions: Dict[str, str] = None, logger: Optional[logging.Logger] = None):
+        """
+        Initialize the DrawingAiService.
+
+        Args:
+            client: AsyncOpenAI client instance
+            drawing_instructions: Optional dictionary of drawing type-specific instructions
+            logger: Optional logger instance
+        """
+        self.client = client
+        self.drawing_instructions = drawing_instructions or {}
+        self.logger = logger or logging.getLogger(__name__)
+
+    def _get_default_system_message(self, drawing_type: str) -> str:
+        """
+        Get the default system message for the given drawing type.
+        
+        Args:
+            drawing_type: Type of drawing (Architectural, Electrical, etc.)
+            
+        Returns:
+            System message string
+        """
+        drawing_instruction = ""
+        if hasattr(self, 'drawing_instructions') and drawing_type in self.drawing_instructions:
+            drawing_instruction = self.drawing_instructions[drawing_type]
+            
+        return f"""
+        You are processing a construction drawing. Extract all relevant information and organize it into a JSON object with the following sections:
+        - 'metadata': Include drawing number, title, date, etc.
+        - 'schedules': Array of schedules with type and data.
+        - 'notes': Array of notes.
+        - 'specifications': Array of specification sections.
+        - 'rooms': For architectural drawings, include an array of rooms with 'number', 'name', 'electrical_info', and 'architectural_info'.
+        
+        {drawing_instruction}
+        
+        IMPORTANT: For architectural drawings, ALWAYS include a 'rooms' array, even if you have to infer room information from context.
+        Ensure the output is valid JSON.
+        """
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(Exception)
+    )
+    @time_operation("ai_processing")
+    async def process(self, request: AiRequest) -> AiResponse[Dict[str, Any]]:
+        """
+        Process an AI request.
+        
+        Args:
+            request: AiRequest object containing parameters
+            
+        Returns:
+            AiResponse with parsed content or error
+        """
+        try:
+            self.logger.info(f"Processing content of length {len(request.content)}")
+            
+            response = await self.client.chat.completions.create(
+                model=request.model_type.value,
+                messages=[
+                    {"role": "system", "content": request.system_message},
+                    {"role": "user", "content": request.content}
+                ],
+                temperature=request.temperature,
+                max_tokens=request.max_tokens
+            )
+            
+            content = response.choices[0].message.content
+            
+            try:
+                parsed_content = json.loads(content)
+                return AiResponse(success=True, content=content, parsed_content=parsed_content)
+            except json.JSONDecodeError as e:
+                self.logger.error(f"JSON decoding error: {str(e)}")
+                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Error processing request: {str(e)}")
+            return AiResponse(success=False, error=str(e))
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(Exception)
+    )
+    @time_operation("ai_processing")
+    async def process_drawing_with_responses(
+        self,
+        raw_content: str,
+        drawing_type: str,
+        temperature: float = 0.2,
+        max_tokens: int = 16000,
+        model_type: ModelType = ModelType.GPT_4O_MINI,
+        system_message: Optional[str] = None
+    ) -> AiResponse:
+        """
+        Process a drawing using the OpenAI API.
+        
+        Args:
+            raw_content: Complete raw content from the drawing - NO TRUNCATION
+            drawing_type: Type of drawing
+            temperature: Temperature parameter
+            max_tokens: Maximum tokens to generate
+            model_type: Model type to use
+            system_message: Optional system message
+            
+        Returns:
+            AiResponse with parsed content or error
+        """
+        try:
+            self.logger.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters")
+            
+            response = await self.client.chat.completions.create(
+                model=model_type.value,
+                messages=[
+                    {"role": "system", "content": system_message or self._get_default_system_message(drawing_type)},
+                    {"role": "user", "content": raw_content}  # Send the FULL content
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            content = response.choices[0].message.content
+            
+            try:
+                parsed_content = json.loads(content)
+                return AiResponse(success=True, content=content, parsed_content=parsed_content)
+            except json.JSONDecodeError as e:
+                self.logger.error(f"JSON decoding error: {str(e)}")
+                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Error processing drawing: {str(e)}")
+            return AiResponse(success=False, error=str(e))
+            
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(Exception)
+    )
+    @time_operation("ai_processing")
+    async def process_with_prompt(
+        self,
+        raw_content: str,
+        temperature: float = 0.2,
+        max_tokens: int = 16000,
+        model_type: ModelType = ModelType.GPT_4O_MINI,
+        system_message: Optional[str] = None
+    ) -> str:
+        """
+        Process a drawing using a specific prompt, ensuring full content is sent to the API.
+        
+        Args:
+            raw_content: Raw content from the drawing
+            temperature: Temperature parameter for the AI model
+            max_tokens: Maximum tokens to generate
+            model_type: AI model type to use
+            system_message: Optional custom system message to override default
+        
+        Returns:
+            Processed content as a JSON string
+
+        Raises:
+            JSONDecodeError: If the response is not valid JSON
+            ValueError: If the JSON structure is invalid
+            Exception: For other processing errors
+        """
+        default_system_message = """
+        You are an AI assistant tasked with processing construction drawings. Your job is to extract all relevant information from the provided content and organize it into a structured JSON object with the following sections:
+        
+        - "metadata": An object containing drawing metadata such as "drawing_number", "title", "date", and "revision". Include any available information; if a field is missing, omit it.
+        
+        - "schedules": An array of schedule objects. Each schedule should have a "type" (e.g., "electrical_panel", "mechanical") and a "data" array containing objects with standardized field names. For example, use "load_name" for fields like "Load" or "Load Type", and "trip" for "Breaker Size" or "Amperage". If a field doesn't match a standard name, include it as-is.
+        
+        - "notes": An array of strings containing any notes or instructions found in the drawing.
+        
+        - "specifications": An array of objects, each with a "section_title" and "content" for specification sections.
+        
+        - "rooms": For architectural drawings, include an array of rooms with 'number', 'name', 'electrical_info', and 'architectural_info'.
+        
+        IMPORTANT: For architectural drawings, ALWAYS include a 'rooms' array, even if you have to infer room information from context.
+        
+        Ensure that the entire response is a single, valid JSON object. Do not include any additional text or explanations outside of the JSON.
+        """
+
+        # Use the provided system message or fall back to default
+        final_system_message = system_message if system_message else default_system_message
+        
+        self.logger.info(f"Processing content of length {len(raw_content)} with model {model_type.value}")
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=model_type.value,
+                messages=[
+                    {"role": "system", "content": final_system_message},
+                    {"role": "user", "content": raw_content}  # Send FULL content
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            content = response.choices[0].message.content
+            parsed_content = json.loads(content)
+            if not self.validate_json(parsed_content):
+                raise ValueError("Invalid JSON structure: missing required keys")
+            return content
+        except json.JSONDecodeError as e:
+            self.logger.error(f"JSON decoding error: {str(e)}")
+            raise
+        except Exception as e:
+            self.logger.error(f"Error processing drawing: {str(e)}")
+            raise
+
+    def validate_json(self, json_data: Dict[str, Any]) -> bool:
+        """
+        Validate the JSON structure.
+
+        Args:
+            json_data: Parsed JSON data
+
+        Returns:
+            True if the JSON has all required keys, False otherwise
+        """
+        required_keys = ["metadata", "schedules", "notes", "specifications"]
+        return all(key in json_data for key in required_keys)
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/storage_service.py
+```py
+"""
+Storage service interface and implementations for saving processing results.
+"""
+from abc import ABC, abstractmethod
+from typing import Dict, Any, Optional, BinaryIO
+import os
+import json
+import logging
+import aiofiles
+import asyncio
+
+
+class StorageService(ABC):
+    """
+    Abstract base class defining the interface for storage services.
+    """
+    @abstractmethod
+    async def save_json(self, data: Dict[str, Any], file_path: str) -> bool:
+        """
+        Save JSON data to a file.
+        
+        Args:
+            data: JSON-serializable data to save
+            file_path: Path where the file should be saved
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def save_text(self, text: str, file_path: str) -> bool:
+        """
+        Save text data to a file.
+        
+        Args:
+            text: Text content to save
+            file_path: Path where the file should be saved
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def save_binary(self, data: bytes, file_path: str) -> bool:
+        """
+        Save binary data to a file.
+        
+        Args:
+            data: Binary content to save
+            file_path: Path where the file should be saved
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def read_json(self, file_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Read JSON data from a file.
+        
+        Args:
+            file_path: Path to the file to read
+            
+        Returns:
+            Parsed JSON data if successful, None otherwise
+        """
+        pass
+
+
+class FileSystemStorage(StorageService):
+    """
+    Storage service implementation using the local file system.
+    """
+    def __init__(self, logger: Optional[logging.Logger] = None):
+        self.logger = logger or logging.getLogger(__name__)
+
+    async def save_json(self, data: Dict[str, Any], file_path: str) -> bool:
+        """
+        Save JSON data to a file.
+        
+        Args:
+            data: JSON-serializable data to save
+            file_path: Path where the file should be saved
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # Save the file asynchronously
+            async with aiofiles.open(file_path, 'w') as f:
+                json_str = json.dumps(data, indent=2)
+                await f.write(json_str)
+                
+            self.logger.info(f"Successfully saved JSON to {file_path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error saving JSON to {file_path}: {str(e)}")
+            return False
+
+    async def save_text(self, text: str, file_path: str) -> bool:
+        """
+        Save text data to a file.
+        
+        Args:
+            text: Text content to save
+            file_path: Path where the file should be saved
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # Save the file asynchronously
+            async with aiofiles.open(file_path, 'w') as f:
+                await f.write(text)
+                
+            self.logger.info(f"Successfully saved text to {file_path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error saving text to {file_path}: {str(e)}")
+            return False
+
+    async def save_binary(self, data: bytes, file_path: str) -> bool:
+        """
+        Save binary data to a file.
+        
+        Args:
+            data: Binary content to save
+            file_path: Path where the file should be saved
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # Save the file asynchronously
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(data)
+                
+            self.logger.info(f"Successfully saved binary data to {file_path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error saving binary data to {file_path}: {str(e)}")
+            return False
+
+    async def read_json(self, file_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Read JSON data from a file.
+        
+        Args:
+            file_path: Path to the file to read
+            
+        Returns:
+            Parsed JSON data if successful, None otherwise
+        """
+        try:
+            if not os.path.exists(file_path):
+                self.logger.warning(f"File not found: {file_path}")
+                return None
+                
+            # Read the file asynchronously
+            async with aiofiles.open(file_path, 'r') as f:
+                content = await f.read()
+                
+            # Parse JSON
+            data = json.loads(content)
+            self.logger.info(f"Successfully read JSON from {file_path}")
+            return data
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Error parsing JSON from {file_path}: {str(e)}")
+            return None
+        except Exception as e:
+            self.logger.error(f"Error reading JSON from {file_path}: {str(e)}")
+            return None 
 ```
 
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/extraction_service.py
@@ -2601,6 +1567,1045 @@ def create_extractor(drawing_type: str, logger: Optional[logging.Logger] = None)
         return PyMuPdfExtractor(logger) 
 ```
 
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/__init__.py
+```py
+# Processing package initialization
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/e_rooms_template.json
+```json
+{
+    "room_id": "",
+    "room_name": "",
+    "circuits": {
+        "lighting": [],
+        "power": []
+    },
+    "light_fixtures": {
+        "fixture_ids": [],
+        "fixture_count": {}
+    },
+    "outlets": {
+        "regular_outlets": 0,
+        "controlled_outlets": 0
+    },
+    "data": 0,
+    "floor_boxes": 0,
+    "mechanical_equipment": [],
+    "switches": {
+        "type": "",
+        "model": "",
+        "dimming": ""
+    }
+} 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/a_rooms_template.json
+```json
+{
+    "room_id": "",
+    "room_name": "",
+    "walls": {
+      "north": "",
+      "south": "",
+      "east": "",
+      "west": ""
+    },
+    "ceiling_height": "",
+    "dimensions": ""
+}
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/room_templates.py
+```py
+import json
+import os
+
+def load_template(template_name):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    template_path = os.path.join(current_dir, f"{template_name}_template.json")
+    try:
+        with open(template_path, 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        print(f"Template file not found: {template_path}")
+        return {}
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON from file: {template_path}")
+        return {}
+
+def generate_rooms_data(parsed_data, room_type):
+    template = load_template(room_type)
+    
+    metadata = parsed_data.get('metadata', {})
+    
+    rooms_data = {
+        "metadata": metadata,
+        "project_name": metadata.get('project', ''),
+        "floor_number": '',
+        "rooms": []
+    }
+    
+    parsed_rooms = parsed_data.get('rooms', [])
+    
+    if not parsed_rooms:
+        print(f"No rooms found in parsed data for {room_type}.")
+        return rooms_data
+
+    for parsed_room in parsed_rooms:
+        room_number = str(parsed_room.get('number', ''))
+        room_name = parsed_room.get('name', '')
+        
+        if not room_number or not room_name:
+            print(f"Skipping room with incomplete data: {parsed_room}")
+            continue
+        
+        room_data = template.copy()
+        room_data['room_id'] = f"Room_{room_number}"
+        room_data['room_name'] = f"{room_name}_{room_number}"
+        
+        # Copy all fields from parsed_room to room_data
+        for key, value in parsed_room.items():
+            if key not in ['number', 'name']:
+                room_data[key] = value
+        
+        rooms_data['rooms'].append(room_data)
+    
+    return rooms_data
+
+def process_architectural_drawing(parsed_data, file_path, output_folder):
+    """
+    Process architectural drawing data (parsed JSON),
+    and generate both e_rooms and a_rooms JSON outputs.
+    """
+    is_reflected_ceiling = "REFLECTED CEILING PLAN" in file_path.upper()
+    
+    floor_number = ''  # If floor number is available in the future, extract it here
+    
+    e_rooms_data = generate_rooms_data(parsed_data, 'e_rooms')
+    a_rooms_data = generate_rooms_data(parsed_data, 'a_rooms')
+    
+    e_rooms_file = os.path.join(output_folder, f'e_rooms_details_floor_{floor_number}.json')
+    a_rooms_file = os.path.join(output_folder, f'a_rooms_details_floor_{floor_number}.json')
+    
+    with open(e_rooms_file, 'w') as f:
+        json.dump(e_rooms_data, f, indent=2)
+    with open(a_rooms_file, 'w') as f:
+        json.dump(a_rooms_data, f, indent=2)
+    
+    return {
+        "e_rooms_file": e_rooms_file,
+        "a_rooms_file": a_rooms_file,
+        "is_reflected_ceiling": is_reflected_ceiling
+    }
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/constants.py
+```py
+import os
+
+DRAWING_TYPES = {
+    'Architectural': ['A', 'AD'],
+    'Electrical': ['E', 'ED'],
+    'Mechanical': ['M', 'MD'],
+    'Plumbing': ['P', 'PD'],
+    'Site': ['S', 'SD'],
+    'Civil': ['C', 'CD'],
+    'Low Voltage': ['LV', 'LD'],
+    'Fire Alarm': ['FA', 'FD'],
+    'Kitchen': ['K', 'KD']
+}
+
+def get_drawing_type(filename: str) -> str:
+    """
+    Detect the drawing type by examining the first 1-2 letters of the filename.
+    """
+    prefix = os.path.basename(filename).split('.')[0][:2].upper()
+    for dtype, prefixes in DRAWING_TYPES.items():
+        if any(prefix.startswith(p.upper()) for p in prefixes):
+            return dtype
+    return 'General'
+
+def get_drawing_subtype(filename: str) -> str:
+    """
+    Detect the drawing subtype based on keywords in the filename.
+    """
+    filename_lower = filename.lower()
+    if "panel schedule" in filename_lower or "electrical schedule" in filename_lower:
+        return "electrical_panel_schedule"
+    elif "mechanical schedule" in filename_lower:
+        return "mechanical_schedule"
+    elif "plumbing schedule" in filename_lower:
+        return "plumbing_schedule"
+    elif "wall types" in filename_lower or "partition types" in filename_lower:
+        return "architectural_schedule"
+    else:
+        return "default"
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/api_utils.py
+```py
+"""
+API utilities for making safe API calls.
+"""
+import asyncio
+import logging
+import random
+from typing import Dict, Any
+
+from services.ai_service import AiRateLimitError, AiConnectionError, AiResponseError
+
+MAX_RETRIES = 3
+RETRY_DELAY = 5  # seconds
+
+
+async def async_safe_api_call(client, *args, **kwargs) -> Dict[str, Any]:
+    """
+    Safely call the OpenAI API with retries and backoff.
+    This is a legacy function. Consider using the AI service instead.
+    
+    Args:
+        client: OpenAI client
+        *args: Positional arguments for the API call
+        **kwargs: Keyword arguments for the API call
+        
+    Returns:
+        API response
+        
+    Raises:
+        Exception: If the API call fails after maximum retries
+    """
+    retries = 0
+    delay = 1  # initial backoff
+
+    while retries < MAX_RETRIES:
+        try:
+            return await client.chat.completions.create(*args, **kwargs)
+        except Exception as e:
+            if "rate limit" in str(e).lower():
+                logging.warning(f"Rate limit hit, retrying in {delay} seconds...")
+                retries += 1
+                delay = min(delay * 2, 60)  # cap backoff at 60s
+                await asyncio.sleep(delay + random.uniform(0, 1))  # add jitter
+            else:
+                logging.error(f"API call failed: {e}")
+                await asyncio.sleep(RETRY_DELAY)
+                retries += 1
+
+    logging.error("Max retries reached for API call")
+    raise Exception("Failed to make API call after maximum retries")
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/file_utils.py
+```py
+import os
+import logging
+from typing import List
+
+logger = logging.getLogger(__name__)
+
+def traverse_job_folder(job_folder: str) -> List[str]:
+    """
+    Traverse the job folder and collect all PDF files.
+    """
+    pdf_files = []
+    try:
+        for root, _, files in os.walk(job_folder):
+            for file in files:
+                if file.lower().endswith('.pdf'):
+                    pdf_files.append(os.path.join(root, file))
+        logger.info(f"Found {len(pdf_files)} PDF files in {job_folder}")
+    except Exception as e:
+        logger.error(f"Error traversing job folder {job_folder}: {str(e)}")
+    return pdf_files
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/logging_utils.py
+```py
+"""
+Logging utilities with structured logging support.
+"""
+import os
+import logging
+import json
+from datetime import datetime
+from typing import Dict, Any, Optional
+
+
+class StructuredLogger:
+    """
+    Logger that produces structured log messages.
+    """
+    def __init__(self, name: str, context: Optional[Dict[str, Any]] = None):
+        self.logger = logging.getLogger(name)
+        self.context = context or {}
+        
+    def add_context(self, **kwargs):
+        """Add context to all log messages."""
+        self.context.update(kwargs)
+        
+    def info(self, message: str, **kwargs):
+        """Log an info message with structured data."""
+        self._log(logging.INFO, message, **kwargs)
+        
+    def warning(self, message: str, **kwargs):
+        """Log a warning message with structured data."""
+        self._log(logging.WARNING, message, **kwargs)
+        
+    def error(self, message: str, **kwargs):
+        """Log an error message with structured data."""
+        self._log(logging.ERROR, message, **kwargs)
+        
+    def _log(self, level: int, message: str, **kwargs):
+        """Internal method to log a message with context."""
+        log_data = {**self.context, **kwargs, "message": message}
+        self.logger.log(level, json.dumps(log_data))
+
+
+def setup_logging(output_folder: str) -> None:
+    """
+    Configure and initialize logging for the application.
+    Creates a 'logs' folder in the output directory.
+    
+    Args:
+        output_folder: Folder to store log files
+    """
+    log_folder = os.path.join(output_folder, 'logs')
+    os.makedirs(log_folder, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_folder, f"process_log_{timestamp}.txt")
+    
+    # Configure basic logging
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    
+    # Add console handler for visibility
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    
+    root_logger = logging.getLogger()
+    root_logger.addHandler(console_handler)
+    
+    print(f"Logging to: {log_file}")
+
+
+def get_logger(name: str, context: Optional[Dict[str, Any]] = None) -> StructuredLogger:
+    """
+    Get a structured logger with the given name and context.
+    
+    Args:
+        name: Logger name
+        context: Optional context dictionary
+        
+    Returns:
+        StructuredLogger instance
+    """
+    return StructuredLogger(name, context)
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/pdf_processor.py
+```py
+"""
+PDF processing utilities that leverage the extraction service.
+"""
+import os
+import json
+import logging
+from typing import Dict, Any, Tuple, Optional
+
+from services.extraction_service import PyMuPdfExtractor, ExtractionResult
+from services.ai_service import DrawingAiService, AiResponse, ModelType
+
+
+async def extract_text_and_tables_from_pdf(pdf_path: str) -> str:
+    """
+    Extract text and tables from a PDF file.
+    This is a legacy wrapper around the new extraction service.
+    
+    Args:
+        pdf_path: Path to the PDF file
+        
+    Returns:
+        Extracted content as a string
+    """
+    extractor = PyMuPdfExtractor()
+    result = await extractor.extract(pdf_path)
+    
+    all_content = ""
+    if result.success:
+        all_content += "TEXT:\n" + result.raw_text + "\n"
+        
+        for table in result.tables:
+            all_content += "TABLE:\n"
+            all_content += table["content"] + "\n"
+    
+    return all_content
+
+
+async def structure_panel_data(client, raw_content: str) -> Dict[str, Any]:
+    """
+    Structure panel data using the AI service.
+    
+    Args:
+        client: OpenAI client
+        raw_content: Raw content from the panel PDF
+        
+    Returns:
+        Structured panel data as a dictionary
+    """
+    from utils.drawing_processor import DRAWING_INSTRUCTIONS
+    
+    ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
+    
+    system_message = """
+    You are an expert in electrical engineering and panel schedules. 
+    Please structure the following content from an electrical panel schedule into a valid JSON format. 
+    The content includes both text and tables. Extract key information such as panel name, voltage, amperage, circuits, 
+    and any other relevant details.
+    Pay special attention to the tabular data, which represents circuit information.
+    Ensure your entire response is a valid JSON object.
+    """
+    
+    response = await ai_service.process_drawing(
+        raw_content=raw_content,
+        drawing_type="Electrical",
+        temperature=0.2,
+        max_tokens=2000,
+        model_type=ModelType.GPT_4O_MINI
+    )
+    
+    if response.success and response.parsed_content:
+        return response.parsed_content
+    else:
+        logging.error(f"Failed to structure panel data: {response.error}")
+        raise Exception(f"Failed to structure panel data: {response.error}")
+
+
+async def process_pdf(pdf_path: str, output_folder: str, client) -> Tuple[str, Dict[str, Any]]:
+    """
+    Process a PDF file and save the structured data.
+    
+    Args:
+        pdf_path: Path to the PDF file
+        output_folder: Folder to save the output
+        client: OpenAI client
+        
+    Returns:
+        Tuple of (raw_content, structured_data)
+    """
+    from services.storage_service import FileSystemStorage
+    
+    print(f"Processing PDF: {pdf_path}")
+    extractor = PyMuPdfExtractor()
+    storage = FileSystemStorage()
+    
+    # Extract content
+    extraction_result = await extractor.extract(pdf_path)
+    if not extraction_result.success:
+        raise Exception(f"Failed to extract content: {extraction_result.error}")
+    
+    # Convert to the format expected by structure_panel_data
+    raw_content = ""
+    raw_content += "TEXT:\n" + extraction_result.raw_text + "\n"
+    for table in extraction_result.tables:
+        raw_content += "TABLE:\n"
+        raw_content += table["content"] + "\n"
+    
+    # Structure data
+    structured_data = await structure_panel_data(client, raw_content)
+    
+    # Save the result
+    panel_name = structured_data.get('panel_name', 'unknown_panel').replace(" ", "_").lower()
+    filename = f"{panel_name}_electric_panel.json"
+    filepath = os.path.join(output_folder, filename)
+    
+    await storage.save_json(structured_data, filepath)
+    
+    print(f"Saved structured panel data: {filepath}")
+    return raw_content, structured_data
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/pdf_utils.py
+```py
+"""
+PDF processing utilities that directly use PyMuPDF.
+This module is being phased out in favor of the extraction service.
+"""
+import pymupdf as fitz
+import logging
+import aiofiles
+from typing import List, Dict, Any, Optional, Tuple
+import os
+
+logger = logging.getLogger(__name__)
+
+async def extract_text(file_path: str) -> str:
+    """
+    Extract text from a PDF file using PyMuPDF.
+    Consider using the extraction service instead.
+    
+    Args:
+        file_path: Path to the PDF file
+        
+    Returns:
+        Extracted text
+    """
+    logger.info(f"Starting text extraction for {file_path}")
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
+        
+    try:
+        with fitz.open(file_path) as doc:
+            logger.info(f"Successfully opened {file_path}")
+            text = ""
+            for i, page in enumerate(doc):
+                logger.info(f"Processing page {i+1} of {len(doc)}")
+                page_text = page.get_text()
+                if page_text:
+                    text += page_text + "\n"
+                else:
+                    logger.warning(f"No text extracted from page {i+1}")
+        
+        if not text:
+            logger.warning(f"No text extracted from {file_path}")
+        else:
+            logger.info(f"Successfully extracted text from {file_path}")
+        
+        return text
+    except Exception as e:
+        logger.error(f"Error extracting text from {file_path}: {str(e)}")
+        raise
+
+async def extract_images(file_path: str) -> List[Dict[str, Any]]:
+    """
+    Extract images from a PDF file using PyMuPDF.
+    Consider using the extraction service instead.
+    
+    Args:
+        file_path: Path to the PDF file
+        
+    Returns:
+        List of image metadata dictionaries
+    """
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
+        
+    try:
+        images = []
+        with fitz.open(file_path) as doc:
+            for page_index, page in enumerate(doc):
+                image_list = page.get_images(full=True)
+                for img_index, img in enumerate(image_list):
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+                    
+                    # PyMuPDF doesn't directly provide bounding box for images
+                    # We'd need to process rect information from the page
+                    # For compatibility, we'll create a similar structure to pdfplumber
+                    
+                    images.append({
+                        'page': page_index + 1,
+                        'bbox': (0, 0, base_image["width"], base_image["height"]),  # Placeholder bbox
+                        'width': base_image["width"],
+                        'height': base_image["height"],
+                        'type': base_image["ext"]  # Image extension/type
+                    })
+        
+        logger.info(f"Extracted {len(images)} images from {file_path}")
+        return images
+    except Exception as e:
+        logger.error(f"Error extracting images from {file_path}: {str(e)}")
+        raise
+
+async def get_pdf_metadata(file_path: str) -> Dict[str, Any]:
+    """
+    Get metadata from a PDF file using PyMuPDF.
+    Consider using the extraction service instead.
+    
+    Args:
+        file_path: Path to the PDF file
+        
+    Returns:
+        PDF metadata dictionary
+    """
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
+        
+    try:
+        with fitz.open(file_path) as doc:
+            # Convert PyMuPDF metadata format to match pdfplumber's format
+            metadata = {
+                "title": doc.metadata.get("title", ""),
+                "author": doc.metadata.get("author", ""),
+                "subject": doc.metadata.get("subject", ""),
+                "creator": doc.metadata.get("creator", ""),
+                "producer": doc.metadata.get("producer", ""),
+                "creationDate": doc.metadata.get("creationDate", ""),
+                "modDate": doc.metadata.get("modDate", "")
+            }
+        logger.info(f"Successfully extracted metadata from {file_path}")
+        return metadata
+    except Exception as e:
+        logger.error(f"Error extracting metadata from {file_path}: {str(e)}")
+        raise
+
+async def save_page_as_image(file_path: str, page_num: int, output_path: str, dpi: int = 300) -> str:
+    """
+    Save a PDF page as an image.
+    
+    Args:
+        file_path: Path to the PDF file
+        page_num: Page number to extract (0-based)
+        output_path: Path to save the image
+        dpi: DPI for the rendered image (default: 300)
+        
+    Returns:
+        Path to the saved image
+        
+    Raises:
+        FileNotFoundError: If the file does not exist
+        IndexError: If the page number is out of range
+        Exception: For any other errors during extraction
+    """
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
+        
+    try:
+        with fitz.open(file_path) as doc:
+            if page_num < 0 or page_num >= len(doc):
+                raise IndexError(f"Page number {page_num} out of range (0-{len(doc)-1})")
+                
+            page = doc[page_num]
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
+            pixmap.save(output_path)
+            
+            logger.info(f"Saved page {page_num} as image: {output_path}")
+            return output_path
+    except Exception as e:
+        logger.error(f"Error saving page as image: {str(e)}")
+        raise
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/.env.example
+```example
+# OpenAI API Configuration
+OPENAI_API_KEY=your_openai_key_here
+
+# Azure Document Intelligence Configuration
+DOCUMENTINTELLIGENCE_ENDPOINT=<yourEndpoint>
+DOCUMENTINTELLIGENCE_API_KEY=<yourKey>
+
+# Optional Configuration
+# LOG_LEVEL=INFO
+# BATCH_SIZE=10
+# API_RATE_LIMIT=60
+# TIME_WINDOW=60 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/performance_utils.py
+```py
+"""
+Performance tracking utilities.
+"""
+import time
+import asyncio
+import logging
+import os
+from typing import Dict, Any, List, Tuple, Callable, Optional, TypeVar, Coroutine
+from functools import wraps
+
+T = TypeVar('T')
+
+
+class PerformanceTracker:
+    """
+    Tracks performance metrics for different operations.
+    """
+    def __init__(self):
+        self.metrics = {
+            "extraction": [],
+            "ai_processing": [],
+            "total_processing": []
+        }
+        self.logger = logging.getLogger(__name__)
+        
+    def add_metric(self, category: str, file_name: str, drawing_type: str, duration: float):
+        """
+        Add a performance metric.
+        
+        Args:
+            category: Category of the operation (extraction, ai_processing, etc.)
+            file_name: Name of the file being processed
+            drawing_type: Type of drawing
+            duration: Duration in seconds
+        """
+        if category not in self.metrics:
+            self.metrics[category] = []
+            
+        self.metrics[category].append({
+            "file_name": file_name,
+            "drawing_type": drawing_type,
+            "duration": duration
+        })
+        
+    def get_average_duration(self, category: str, drawing_type: Optional[str] = None) -> float:
+        """
+        Get the average duration for a category.
+        
+        Args:
+            category: Category of the operation
+            drawing_type: Optional drawing type filter
+            
+        Returns:
+            Average duration in seconds
+        """
+        if category not in self.metrics:
+            return 0.0
+            
+        metrics = self.metrics[category]
+        if drawing_type:
+            metrics = [m for m in metrics if m["drawing_type"] == drawing_type]
+            
+        if not metrics:
+            return 0.0
+            
+        return sum(m["duration"] for m in metrics) / len(metrics)
+        
+    def get_slowest_operations(self, category: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get the slowest operations for a category.
+        
+        Args:
+            category: Category of the operation
+            limit: Maximum number of results
+            
+        Returns:
+            List of slow operations
+        """
+        if category not in self.metrics:
+            return []
+            
+        return sorted(
+            self.metrics[category],
+            key=lambda m: m["duration"],
+            reverse=True
+        )[:limit]
+        
+    def report(self):
+        """
+        Generate a report of performance metrics.
+        
+        Returns:
+            Dictionary of performance reports
+        """
+        report = {}
+        
+        for category in self.metrics:
+            if not self.metrics[category]:
+                continue
+                
+            # Get overall average
+            overall_avg = self.get_average_duration(category)
+            
+            # Get averages by drawing type
+            drawing_types = set(m["drawing_type"] for m in self.metrics[category])
+            type_averages = {
+                dt: self.get_average_duration(category, dt)
+                for dt in drawing_types
+            }
+            
+            # Get slowest operations
+            slowest = self.get_slowest_operations(category, 5)
+            
+            report[category] = {
+                "overall_average": overall_avg,
+                "by_drawing_type": type_averages,
+                "slowest_operations": slowest,
+                "total_operations": len(self.metrics[category])
+            }
+            
+        return report
+        
+    def log_report(self):
+        """
+        Log the performance report.
+        """
+        report = self.report()
+        
+        self.logger.info("=== Performance Report ===")
+        
+        for category, data in report.items():
+            self.logger.info(f"Category: {category}")
+            self.logger.info(f"  Overall average: {data['overall_average']:.2f}s")
+            self.logger.info(f"  Total operations: {data['total_operations']}")
+            
+            self.logger.info("  By drawing type:")
+            for dt, avg in data['by_drawing_type'].items():
+                self.logger.info(f"    {dt}: {avg:.2f}s")
+                
+            self.logger.info("  Slowest operations:")
+            for op in data['slowest_operations']:
+                self.logger.info(f"    {op['file_name']} ({op['drawing_type']}): {op['duration']:.2f}s")
+                
+        self.logger.info("==========================")
+
+
+# Create a global instance
+tracker = PerformanceTracker()
+
+
+def time_operation(category: str):
+    """
+    Decorator to time an operation and add it to the tracker.
+    
+    Args:
+        category: Category of the operation
+    """
+    def decorator(func):
+        # Define common parameter names here so they're available to both wrappers
+        file_params = ["pdf_path", "file_path", "path"]
+        type_params = ["drawing_type", "type"]
+        
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            # Try to determine file name and drawing type from args/kwargs
+            file_name = "unknown"
+            drawing_type = "unknown"
+            
+            # Check positional args - this is a heuristic and may need adjustment
+            if len(args) > 0 and isinstance(args[0], str) and args[0].endswith(".pdf"):
+                file_name = os.path.basename(args[0])
+            
+            if len(args) > 2 and isinstance(args[2], str):
+                drawing_type = args[2]
+                
+            # Check keyword args
+            for param in file_params:
+                if param in kwargs and isinstance(kwargs[param], str):
+                    file_name = os.path.basename(kwargs[param])
+                    break
+                    
+            for param in type_params:
+                if param in kwargs and isinstance(kwargs[param], str):
+                    drawing_type = kwargs[param]
+                    break
+            
+            start_time = time.time()
+            try:
+                result = await func(*args, **kwargs)
+                return result
+            finally:
+                duration = time.time() - start_time
+                tracker.add_metric(category, file_name, drawing_type, duration)
+                
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            # Similar logic as async_wrapper for file_name and drawing_type
+            file_name = "unknown"
+            drawing_type = "unknown"
+            
+            # Check positional args
+            if len(args) > 0 and isinstance(args[0], str) and args[0].endswith(".pdf"):
+                file_name = os.path.basename(args[0])
+            
+            if len(args) > 2 and isinstance(args[2], str):
+                drawing_type = args[2]
+                
+            # Check keyword args
+            for param in file_params:
+                if param in kwargs and isinstance(kwargs[param], str):
+                    file_name = os.path.basename(kwargs[param])
+                    break
+                    
+            for param in type_params:
+                if param in kwargs and isinstance(kwargs[param], str):
+                    drawing_type = kwargs[param]
+                    break
+            
+            start_time = time.time()
+            try:
+                result = func(*args, **kwargs)
+                return result
+            finally:
+                duration = time.time() - start_time
+                tracker.add_metric(category, file_name, drawing_type, duration)
+                
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+            
+    return decorator
+
+
+# Get the global tracker
+def get_tracker() -> PerformanceTracker:
+    """
+    Get the global performance tracker.
+    
+    Returns:
+        Global PerformanceTracker instance
+    """
+    return tracker 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/main.py
+```py
+import os
+import sys
+import asyncio
+import logging
+import time
+
+from openai import AsyncOpenAI
+from config.settings import OPENAI_API_KEY, get_all_settings
+from utils.logging_utils import setup_logging
+from processing.job_processor import process_job_site_async
+from utils.performance_utils import get_tracker
+
+async def main_async():
+    """
+    Main async function to handle processing with better error handling.
+    """
+    if len(sys.argv) < 2:
+        print("Usage: python main.py <input_folder> [output_folder]")
+        return 1
+    
+    job_folder = sys.argv[1]
+    output_folder = sys.argv[2] if len(sys.argv) > 2 else os.path.join(job_folder, "output")
+    
+    if not os.path.exists(job_folder):
+        print(f"Error: Input folder '{job_folder}' does not exist.")
+        return 1
+    
+    # 1) Set up logging
+    setup_logging(output_folder)
+    logging.info(f"Processing files from: {job_folder}")
+    logging.info(f"Output will be saved to: {output_folder}")
+    logging.info(f"Application settings: {get_all_settings()}")
+    
+    try:
+        # 2) Create OpenAI Client (v1.66.3)
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        
+        # 3) Record start time
+        start_time = time.time()
+        
+        # 4) Run asynchronous job processing
+        await process_job_site_async(job_folder, output_folder, client)
+        
+        # 5) Calculate total processing time
+        total_time = time.time() - start_time
+        logging.info(f"Total processing time: {total_time:.2f} seconds")
+        
+        # 6) Generate performance report
+        tracker = get_tracker()
+        tracker.log_report()
+        
+        return 0
+    except Exception as e:
+        logging.error(f"Unhandled exception in main process: {str(e)}")
+        return 1
+
+if __name__ == "__main__":
+    try:
+        exit_code = asyncio.run(main_async())
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        print("\nProcess interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Fatal error: {str(e)}")
+        sys.exit(1) 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/__init__.py
+```py
+# Processing package initialization
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/requirements.txt
+```txt
+# Async utilities
+aiofiles>=23.2.1
+asyncio>=3.4.3
+aiohttp~=3.11
+aiohappyeyeballs~=2.4.4
+aiosignal~=1.3.2
+anyio~=4.8.0
+jiter~=0.8.2
+sniffio~=1.3.1
+
+# HTTP and API clients
+httpx~=0.28.1
+httpcore~=1.0.7
+requests~=2.32.3
+urllib3~=2.2.3
+yarl~=1.17.0
+frozenlist~=1.4.1
+multidict~=6.1.0
+h11~=0.14.0
+
+# OpenAI
+openai~=1.66.3  # For Responses API support
+tiktoken~=0.9.0
+
+# PDF processing
+PyMuPDF~=1.24.11  # For enhanced text extraction formats and DataFrame support
+pypdfium2~=4.30.0
+Wand~=0.6.13
+pandas>=2.0.0  # For PyMuPDF's Table.to_pandas() functionality
+
+# Data validation and type handling
+pydantic~=2.10.5  # Using v2 validation patterns (field_validator)
+pydantic_core~=2.27.2
+typing_extensions~=4.12.2
+annotated-types~=0.7.0
+attrs~=24.3.0
+
+# Utilities
+python-dotenv~=1.0.1
+tqdm~=4.66.5
+tenacity~=9.0.0  # For enhanced retry patterns
+pillow~=10.4.0
+
+# Security and crypto
+certifi~=2024.12.14
+cffi~=1.17.1
+charset-normalizer~=3.4.1
+cryptography~=44.0.0
+pycparser~=2.22
+distro~=1.9.0
+
+# Azure (legacy, maintaining for backward compatibility)
+azure-ai-documentintelligence==1.0.0
+azure-core>=1.32.0
+
+# Testing
+pytest~=7.4.0
+pytest-asyncio~=0.21.1  # For testing asynchronous functions
+pytest-cov~=4.1.0  # For test coverage
+
+```
+
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/drawing_processor.py
 ```py
 """
@@ -2653,44 +2658,32 @@ def optimize_model_parameters(
     """
     content_length = len(raw_content)
     
-    # Default parameters
+    # Default parameters using a model with a large context window
     params = {
         "model_type": ModelType.GPT_4O_MINI,
         "temperature": 0.2,
-        "max_tokens": 16000
+        "max_tokens": 16000,
     }
     
-    # Adjust based on drawing type
+    # Adjust based on drawing type - only adjust temperature (never modify content)
     if drawing_type == "Electrical":
         if "PANEL-SCHEDULES" in file_name.upper() or "PANEL_SCHEDULES" in file_name.upper():
-            # Panel schedules need more structured output but are often simpler
             params["temperature"] = 0.1
-            params["max_tokens"] = 8000
-            
         elif "LIGHTING" in file_name.upper():
-            # Lighting plans can be complex
-            params["max_tokens"] = 12000
-            
+            params["temperature"] = 0.2
     elif drawing_type == "Architectural":
-        # Architectural drawings need detailed processing
         if "REFLECTED CEILING" in file_name.upper():
             params["temperature"] = 0.15
-            
     elif drawing_type == "Mechanical":
         if "SCHEDULES" in file_name.upper():
-            # Mechanical schedules can be complex
-            params["max_tokens"] = 12000
+            params["temperature"] = 0.2
     
-    # Adjust based on content length
-    if content_length > 50000:
-        # Very large documents may need more powerful model
-        logging.info(f"Large document detected ({content_length} chars), using more powerful model")
-        params["model_type"] = ModelType.GPT_4O
-        
-    elif content_length < 10000 and drawing_type not in ["Architectural", "Electrical"]:
-        # Small documents for less critical drawing types could use faster models
-        logging.info(f"Small document detected ({content_length} chars), optimizing for speed")
-        params["max_tokens"] = 4000
+    # For specifications, use lower temperature for more deterministic results
+    if "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS":
+        logging.info(f"Processing specification document ({content_length} chars)")
+        params["temperature"] = 0.1
+    
+    logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']}")
     
     return params
 
@@ -2698,8 +2691,7 @@ def optimize_model_parameters(
 @time_operation("ai_processing")
 async def process_drawing(raw_content: str, drawing_type: str, client, file_name: str = "") -> str:
     """
-    Use GPT to parse PDF text + table data into structured JSON
-    based on the drawing type.
+    Use GPT to parse PDF text and table data into structured JSON based on the drawing type.
     
     Args:
         raw_content: Raw content from the drawing
@@ -2717,8 +2709,7 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
         # Get optimized parameters for this drawing
         params = optimize_model_parameters(drawing_type, raw_content, file_name)
         
-        logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} " +
-                    f"and max_tokens {params['max_tokens']} for {drawing_type} drawing")
+        logging.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters")
         
         # Enhanced system message that emphasizes room extraction for architectural drawings
         system_message = f"""
@@ -2737,7 +2728,7 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
         
         # Process the drawing using the Responses API (falls back to standard if needed)
         response: AiResponse[Dict[str, Any]] = await ai_service.process_drawing_with_responses(
-            raw_content=raw_content,
+            raw_content=raw_content,  # Send the complete content without modifications
             drawing_type=drawing_type,
             temperature=params["temperature"],
             max_tokens=params["max_tokens"],
@@ -2754,6 +2745,132 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
         logging.error(f"Error processing {drawing_type} drawing: {str(e)}")
         raise
 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/backup/prompts.py
+```py
+# utils/prompts.py
+
+UNIFIED_PROMPT = """
+You are an expert in analyzing construction drawings and specifications. I'm providing you with extracted text and tables from a construction document.
+
+DOCUMENT TYPE: {drawing_type}
+FILENAME: {file_name}
+
+Your task is to organize ALL of this information into a well-structured JSON format. The exact structure should be based on the content type:
+
+1. For SPECIFICATIONS (like electrical specs):
+   - Capture ALL sections, subsections, paragraphs, and list items
+   - Preserve the hierarchical structure (sections, parts, clauses)
+   - Include ALL text content - don't summarize or skip anything
+   - For electrical specifications, include information about materials, methods, and requirements
+   - Create a normalized structure with consistent key names (e.g., 'section_id', 'section_title', 'content')
+   - Preserve all references to standards, codes, and regulations (e.g., NEC, ASTM, NFPA)
+
+2. For SCHEDULES (equipment, panel, fixture schedules):
+   - Create structured arrays for each schedule type
+   - Maintain consistent field names across similar items
+   - Standardize field names (use 'load_name' not "description"/"load", use 'trip' not "ocp"/"amperage")
+   - For panel schedules, include panel details (name, voltage, phases, main_type, mounting, bus_rating) and circuit information
+   - For mechanical schedules, include equipment details (type, model, capacity, connection_requirements, airflow)
+   - For plumbing schedules, include fixture details (fixture_type, connection_sizes, flow_rates, pressure_requirements)
+   - Always include room_id references when available to link equipment to specific rooms
+   - Preserve manufacturer information, part numbers, and model numbers exactly as specified
+
+3. For ARCHITECTURAL DRAWINGS:
+   - Create a 'rooms' array with comprehensive room information (room_id, room_name, room_number, area, dimensions)
+   - Include wall types with proper structure (wall_type_id, composition, fire_rating, acoustic_properties, thickness)
+   - Structure door schedules with comprehensive details (door_id, door_type, material, hardware_set, dimensions, fire_rating)
+   - Include window schedules and opening information (window_id, window_type, dimensions, glazing, operation_type)
+   - Capture finish schedules and material specifications (floor, wall, ceiling finishes with manufacturer and model)
+   - Document ceiling types and heights for each room
+   - Include furniture and equipment layouts when present
+   - Capture accessibility requirements and clearances
+
+4. For ELECTRICAL DRAWINGS:
+   - Include 'panels' array for panel schedules with complete circuit information (circuit_id, load_description, load_type, amperage, poles)
+   - Structure 'lighting_fixtures' array for fixture schedules (fixture_type, manufacturer, model, wattage, lamp_type, mounting)
+   - Capture circuit information in structured format (circuit_number, description, connected_load, demand_load, voltage)
+   - Include device specifications (switches, sensors, receptacles) with model numbers and locations
+   - Document home runs and circuit connections between panels (source_panel, circuit_number, destination)
+   - Capture keynotes and general notes related to electrical installation
+   - Include riser diagrams information (feeders, conduit sizes, wire sizes)
+   - Document emergency power systems and connections
+   - Capture lighting control systems and zoning information
+
+5. For MECHANICAL DRAWINGS:
+   - Structure 'equipment' array for HVAC units (equipment_id, equipment_type, model, capacity, connections, electrical_requirements)
+   - Include 'air_outlets' details (outlet_id, outlet_type, airflow, size, model, location)
+   - Document ductwork specifications and sizing (duct_size, material, insulation, pressure_class)
+   - Capture ventilation requirements per room (air_changes, cfm, exhaust_requirements)
+   - Include mechanical equipment connections to electrical panels (panel_id, circuit_id, load)
+   - Document temperature control systems and zoning
+   - Include equipment schedules with all performance metrics
+   - Capture system pressure, flow rates, and balance points
+   - Document noise criteria and vibration isolation requirements
+
+6. For PLUMBING DRAWINGS:
+   - Structure 'fixtures' array with detailed specifications (fixture_id, fixture_type, manufacturer, model, connections)
+   - Include pipe sizing and material information (pipe_type, size, material, insulation, slope)
+   - Document water heater and pump specifications (capacity, flow_rate, pressure, electrical_requirements)
+   - Capture drainage system details (drain_size, slope, cleanout_locations)
+   - Include fixture connection requirements (hot_water_size, cold_water_size, waste_size, vent_size)
+   - Document water supply system information (pressure, flow, backflow prevention)
+   - Capture sanitary and vent riser information
+   - Include special systems (medical gas, compressed air, vacuum)
+
+7. For FIRE PROTECTION DRAWINGS:
+   - Structure 'sprinklers' array with details (sprinkler_type, coverage, k_factor, temperature_rating)
+   - Include pipe sizes and materials specific to fire protection
+   - Document fire alarm devices and connections
+   - Capture fire suppression systems and specifications
+   - Include hydraulic calculations and design criteria
+
+8. For SITE AND CIVIL DRAWINGS:
+   - Capture grading information and elevations
+   - Include utility connections and routing
+   - Document site lighting specifications
+   - Structure parking and paving details
+   - Include landscape elements and specifications
+
+IMPORTANT GUIDELINES:
+- Include a comprehensive 'metadata' section with drawing_number, title, date, scale, revision_number, etc.
+- NEVER truncate or summarize content - capture EVERYTHING in structured format
+- Use consistent field names and standardize across similar items (use singular_noun for field names with snake_case)
+- Create logical hierarchical structure based on the document's organization
+- Maintain original terminology, numbering, and values from the document
+- When a room has equipment or fixtures, include both the equipment_id and room_id to enable cross-referencing
+- For circuit connections, always include the source_panel and circuit_number
+- Format your entire response as a single valid JSON object
+- For all drawings, capture ALL keynotes, general notes, and references
+- Ensure proper nesting of related information (e.g., a panel contains circuits, a room contains fixtures)
+- Use standard JSON data types appropriately (strings, numbers, booleans, arrays, objects)
+- When dimensions are present, separate numeric values from units (e.g., {"value": 24, "unit": "inches"})
+- Normalize technical terminology throughout the document
+- Handle abbreviations consistently (either preserve as-is or expand to full terms)
+- When information appears to be missing, use null rather than empty strings
+- Identify and handle duplicate information appropriately (create references rather than duplicating)
+- Ensure all IDs are unique and follow a consistent pattern within their category
+
+Your response MUST be valid JSON with no explanatory text outside the JSON structure.
+"""
+
+# Keep this dictionary but replace individual prompts with the unified one
+PROMPTS = {
+    "architectural": UNIFIED_PROMPT,
+    "electrical": UNIFIED_PROMPT,
+    "mechanical": UNIFIED_PROMPT,
+    "plumbing": UNIFIED_PROMPT,
+    "fire_protection": UNIFIED_PROMPT,
+    "civil": UNIFIED_PROMPT,
+    "structural": UNIFIED_PROMPT,
+    "landscape": UNIFIED_PROMPT,
+    "default": UNIFIED_PROMPT,
+    "electrical_panel_schedule": UNIFIED_PROMPT,
+    "mechanical_schedule": UNIFIED_PROMPT,
+    "plumbing_schedule": UNIFIED_PROMPT,
+    "architectural_schedule": UNIFIED_PROMPT
+}
 ```
 </file_contents>
 
