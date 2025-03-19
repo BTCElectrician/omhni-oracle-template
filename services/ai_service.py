@@ -466,3 +466,56 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
     except Exception as e:
         logging.error(f"Error processing {drawing_type} drawing: {str(e)}")
         raise
+
+@time_operation("ai_processing")
+async def process_drawing_simple(raw_content: str, drawing_type: str, client, file_name: str = "") -> str:
+    """
+    Process a drawing using a simple, universal prompt - similar to pasting into ChatGPT UI.
+    Requires fewer specific instructions but relies on the model's understanding of construction drawings.
+    
+    Args:
+        raw_content: Raw content from the drawing
+        drawing_type: Type of drawing (for logging and minimal customization)
+        client: OpenAI client
+        file_name: Optional name of the file being processed
+        
+    Returns:
+        Structured JSON as a string
+    """
+    try:
+        # Log processing attempt
+        logging.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters using simplified approach")
+        
+        # Create minimal customization based on drawing type
+        drawing_hint = ""
+        if drawing_type == "Architectural":
+            drawing_hint = " Include room information where available."
+        elif drawing_type == "Electrical":
+            drawing_hint = " Pay attention to panel schedules and circuit information."
+        elif drawing_type == "Specifications":
+            drawing_hint = " Preserve ALL specification text content completely."
+        
+        # Single, universal prompt
+        system_message = f"""
+        Structure this construction drawing content into well-organized JSON.{drawing_hint}
+        Include all relevant information from the document and preserve the relationships between elements.
+        Ensure your response is ONLY valid JSON with no additional text.
+        """
+        
+        # Make the API call
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini-2024-07-18",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": raw_content}
+            ],
+            temperature=0.1,
+            max_tokens=16000,
+            response_format={"type": "json_object"}
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        logging.error(f"Error in simplified processing of {drawing_type} drawing: {str(e)}")
+        raise

@@ -6,10 +6,11 @@ from dotenv import load_dotenv
 from typing import Dict, Any
 
 from services.extraction_service import create_extractor
-from services.ai_service import DrawingAiService, process_drawing
+from services.ai_service import DrawingAiService, process_drawing, process_drawing_simple
 from services.storage_service import FileSystemStorage
 from utils.performance_utils import time_operation
 from utils.constants import get_drawing_type
+from config.settings import USE_SIMPLIFIED_PROCESSING
 
 # Load environment variables
 load_dotenv()
@@ -59,7 +60,13 @@ async def process_pdf_async(
             pbar.update(20)
 
             # Send the complete raw content to the AI service using process_drawing
-            structured_json = await process_drawing(raw_content, drawing_type, client, file_name)
+            # structured_json = await process_drawing(raw_content, drawing_type, client, file_name)
+            
+            if USE_SIMPLIFIED_PROCESSING:
+                logger.info(f"Using simplified processing approach for {file_name}")
+                structured_json = await process_drawing_simple(raw_content, drawing_type, client, file_name)
+            else:
+                structured_json = await process_drawing(raw_content, drawing_type, client, file_name)
             pbar.update(40)
 
             type_folder = os.path.join(output_folder, drawing_type)

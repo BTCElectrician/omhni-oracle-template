@@ -21,6 +21,9 @@ BATCH_SIZE = int(os.getenv('BATCH_SIZE', '10'))
 API_RATE_LIMIT = int(os.getenv('API_RATE_LIMIT', '60'))
 TIME_WINDOW = int(os.getenv('TIME_WINDOW', '60'))
 
+# Processing Mode Configuration
+USE_SIMPLIFIED_PROCESSING = os.getenv('USE_SIMPLIFIED_PROCESSING', 'false').lower() == 'true'
+
 # Template Configuration
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
 
@@ -35,5 +38,6 @@ def get_all_settings() -> Dict[str, Any]:
         "API_RATE_LIMIT": API_RATE_LIMIT,
         "TIME_WINDOW": TIME_WINDOW,
         "TEMPLATE_DIR": TEMPLATE_DIR,
-        "DEBUG_MODE": DEBUG_MODE
+        "DEBUG_MODE": DEBUG_MODE,
+        "USE_SIMPLIFIED_PROCESSING": USE_SIMPLIFIED_PROCESSING
     }
