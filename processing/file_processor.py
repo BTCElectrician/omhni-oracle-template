@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from typing import Dict, Any
 
 from services.extraction_service import create_extractor
-from services.ai_service import DrawingAiService
+from services.ai_service import DrawingAiService, process_drawing
 from services.storage_service import FileSystemStorage
 from utils.performance_utils import time_operation
 from utils.constants import get_drawing_type
@@ -58,8 +58,8 @@ async def process_pdf_async(
                 
             pbar.update(20)
 
-            # Send the complete raw content to the AI service
-            structured_json = await ai_service.process_with_prompt(raw_content)
+            # Send the complete raw content to the AI service using process_drawing
+            structured_json = await process_drawing(raw_content, drawing_type, client, file_name)
             pbar.update(40)
 
             type_folder = os.path.join(output_folder, drawing_type)
@@ -70,6 +70,7 @@ async def process_pdf_async(
             except json.JSONDecodeError as e:
                 pbar.update(100)
                 logger.error(f"JSON error for {pdf_path}: {str(e)}")
+                logger.error(f"Raw API response: {structured_json[:500]}...")  # Log the first 500 chars
                 raw_output_path = os.path.join(type_folder, f"{os.path.splitext(file_name)[0]}_raw_response.json")
                 await storage.save_text(structured_json, raw_output_path)
                 return {"success": False, "error": f"JSON parse failed: {str(e)}", "file": pdf_path}

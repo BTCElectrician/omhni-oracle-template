@@ -6,6 +6,89 @@ from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from utils.performance_utils import time_operation
 
+# Drawing type-specific instructions
+DRAWING_INSTRUCTIONS = {
+    "Electrical": "Focus on panel schedules, circuit info, equipment schedules with electrical characteristics, and installation notes.",
+    "Mechanical": "Capture equipment schedules, HVAC details (CFM, capacities), and installation instructions.",
+    "Plumbing": "Include fixture schedules, pump details, water heater specs, pipe sizing, and system instructions.",
+    "Architectural": """
+    Extract and structure the following information:
+    1. Room details: Create a 'rooms' array with objects for each room, including:
+       - 'number': Room number (as a string)
+       - 'name': Room name
+       - 'finish': Ceiling finish
+       - 'height': Ceiling height
+       - 'electrical_info': Any electrical specifications
+       - 'architectural_info': Any additional architectural details
+    2. Room finish schedules
+    3. Door/window details
+    4. Wall types
+    5. Architectural notes
+    Ensure all rooms are captured and properly structured in the JSON output.
+    """,
+    "Specifications": """
+    IMPORTANT: Preserve the FULL CONTENT of each specification section, not just the headers.
+    For each specification section:
+    1. Create objects in the 'specifications' array with:
+       - 'section_title': The section number and title (e.g., "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS")
+       - 'content': The COMPLETE text content of the section, including all parts, subsections, and items
+    2. Maintain the hierarchical structure (SECTION > PART > SUBSECTION)
+    3. Preserve all numbered and lettered items
+    4. Include all paragraphs, tables, and detailed requirements
+    Do not summarize or truncate the content - include the entire text of each section.
+    """,
+    "General": "Organize all relevant data into logical categories based on content type."
+}
+
+def optimize_model_parameters(
+    drawing_type: str,
+    raw_content: str,
+    file_name: str
+) -> Dict[str, Any]:
+    """
+    Determine optimal model parameters based on drawing type and content.
+    
+    Args:
+        drawing_type: Type of drawing (Architectural, Electrical, etc.)
+        raw_content: Raw content from the drawing
+        file_name: Name of the file being processed
+        
+    Returns:
+        Dictionary of optimized parameters
+    """
+    content_length = len(raw_content)
+    
+    # Default parameters using a model with a large context window
+    params = {
+        "model_type": ModelType.GPT_4O_MINI,
+        "temperature": 0.2,
+        "max_tokens": 16000,
+    }
+    
+    # Adjust based on drawing type - only adjust temperature (never modify content)
+    if drawing_type == "Electrical":
+        if "PANEL-SCHEDULES" in file_name.upper() or "PANEL_SCHEDULES" in file_name.upper():
+            params["temperature"] = 0.1
+        elif "LIGHTING" in file_name.upper():
+            params["temperature"] = 0.2
+    elif drawing_type == "Architectural":
+        if "REFLECTED CEILING" in file_name.upper():
+            params["temperature"] = 0.15
+    elif drawing_type == "Mechanical":
+        if "SCHEDULES" in file_name.upper():
+            params["temperature"] = 0.2
+    
+    # For specifications, use lower temperature for more deterministic results
+    if "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS":
+        logging.info(f"Processing specification document ({content_length} chars)")
+        params["temperature"] = 0.1
+        # Increase max_tokens for specifications to ensure full content preservation
+        params["max_tokens"] = 32000
+    
+    logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} and max_tokens {params['max_tokens']}")
+    
+    return params
+
 class ModelType(Enum):
     """Enumeration of supported AI model types."""
     GPT_4O_MINI = "gpt-4o-mini-2024-07-18"
@@ -73,7 +156,7 @@ class DrawingAiService:
             logger: Optional logger instance
         """
         self.client = client
-        self.drawing_instructions = drawing_instructions or {}
+        self.drawing_instructions = drawing_instructions or DRAWING_INSTRUCTIONS
         self.logger = logger or logging.getLogger(__name__)
 
     def _get_default_system_message(self, drawing_type: str) -> str:
@@ -130,7 +213,8 @@ class DrawingAiService:
                     {"role": "user", "content": request.content}
                 ],
                 temperature=request.temperature,
-                max_tokens=request.max_tokens
+                max_tokens=request.max_tokens,
+                response_format={"type": "json_object"}  # Ensure JSON response
             )
             
             content = response.choices[0].message.content
@@ -140,9 +224,10 @@ class DrawingAiService:
                 return AiResponse(success=True, content=content, parsed_content=parsed_content)
             except json.JSONDecodeError as e:
                 self.logger.error(f"JSON decoding error: {str(e)}")
+                self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
                 return AiResponse(success=False, error=f"JSON decoding error: {str(e)}")
         except Exception as e:
-            self.logger.error(f"Error processing request: {str(e)}")
+            self.logger.error(f"Error processing drawing: {str(e)}")
             return AiResponse(success=False, error=str(e))
 
     @retry(
@@ -184,7 +269,8 @@ class DrawingAiService:
                     {"role": "user", "content": raw_content}  # Send the FULL content
                 ],
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"}  # Ensure JSON response
             )
             
             content = response.choices[0].message.content
@@ -194,11 +280,12 @@ class DrawingAiService:
                 return AiResponse(success=True, content=content, parsed_content=parsed_content)
             except json.JSONDecodeError as e:
                 self.logger.error(f"JSON decoding error: {str(e)}")
+                self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
                 return AiResponse(success=False, error=f"JSON decoding error: {str(e)}")
         except Exception as e:
             self.logger.error(f"Error processing drawing: {str(e)}")
             return AiResponse(success=False, error=str(e))
-            
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -262,16 +349,19 @@ class DrawingAiService:
                     {"role": "user", "content": raw_content}  # Send FULL content
                 ],
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"}  # Ensure JSON response
             )
             content = response.choices[0].message.content
-            parsed_content = json.loads(content)
-            if not self.validate_json(parsed_content):
-                raise ValueError("Invalid JSON structure: missing required keys")
-            return content
-        except json.JSONDecodeError as e:
-            self.logger.error(f"JSON decoding error: {str(e)}")
-            raise
+            try:
+                parsed_content = json.loads(content)
+                if not self.validate_json(parsed_content):
+                    raise ValueError("Invalid JSON structure: missing required keys")
+                return content
+            except json.JSONDecodeError as e:
+                self.logger.error(f"JSON decoding error: {str(e)}")
+                self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
+                raise
         except Exception as e:
             self.logger.error(f"Error processing drawing: {str(e)}")
             raise
@@ -287,4 +377,92 @@ class DrawingAiService:
             True if the JSON has all required keys, False otherwise
         """
         required_keys = ["metadata", "schedules", "notes", "specifications"]
+        
+        # For specifications, ensure specifications is an array of objects with section_title and content
+        if "specifications" in json_data:
+            specs = json_data["specifications"]
+            # Check if specifications is an array of strings (old format) or objects (new format)
+            if isinstance(specs, list) and len(specs) > 0:
+                if isinstance(specs[0], str):
+                    # Converting old format to new format
+                    self.logger.warning("Converting specifications from string array to object array")
+                    json_data["specifications"] = [{"section_title": spec, "content": ""} for spec in specs]
+        
         return all(key in json_data for key in required_keys)
+
+@time_operation("ai_processing")
+async def process_drawing(raw_content: str, drawing_type: str, client, file_name: str = "") -> str:
+    """
+    Use GPT to parse PDF text and table data into structured JSON based on the drawing type.
+    
+    Args:
+        raw_content: Raw content from the drawing
+        drawing_type: Type of drawing (Architectural, Electrical, etc.)
+        client: OpenAI client
+        file_name: Optional name of the file being processed
+        
+    Returns:
+        Structured JSON as a string
+    """
+    try:
+        # Create the AI service
+        ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
+        
+        # Get optimized parameters for this drawing
+        params = optimize_model_parameters(drawing_type, raw_content, file_name)
+        
+        logging.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters")
+        
+        # Check if this is a specification document
+        is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
+        
+        # Enhanced system message with different emphasis based on document type
+        if is_specification:
+            system_message = f"""
+            You are processing a SPECIFICATION document. Extract all relevant information and organize it into a JSON object.
+            
+            CRITICAL INSTRUCTIONS:
+            - In the 'specifications' array, create objects with 'section_title' and 'content' fields
+            - The 'section_title' should contain the section number and name (e.g., "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS")
+            - The 'content' field MUST contain the COMPLETE TEXT of each section, including all parts, subsections, and detailed requirements
+            - Preserve the hierarchical structure (SECTION > PART > SUBSECTION)
+            - Include all numbered and lettered items, paragraphs, tables, and detailed requirements
+            - Do not summarize or truncate - include the ENTIRE text of each section
+            
+            {DRAWING_INSTRUCTIONS.get("Specifications", DRAWING_INSTRUCTIONS["General"])}
+            
+            Ensure the output is valid JSON.
+            """
+        else:
+            system_message = f"""
+            You are processing a construction drawing. Extract all relevant information and organize it into a JSON object with the following sections:
+            - 'metadata': Include drawing number, title, date, etc.
+            - 'schedules': Array of schedules with type and data.
+            - 'notes': Array of notes.
+            - 'specifications': Array of specification sections.
+            - 'rooms': For architectural drawings, include an array of rooms with 'number', 'name', 'electrical_info', and 'architectural_info'.
+            
+            {DRAWING_INSTRUCTIONS.get(drawing_type, DRAWING_INSTRUCTIONS["General"])}
+            
+            IMPORTANT: For architectural drawings, ALWAYS include a 'rooms' array, even if you have to infer room information from context.
+            Ensure the output is valid JSON.
+            """
+        
+        # Process the drawing using the Responses API (falls back to standard if needed)
+        response: AiResponse[Dict[str, Any]] = await ai_service.process_drawing_with_responses(
+            raw_content=raw_content,  # Send the complete content without modifications
+            drawing_type=drawing_type,
+            temperature=params["temperature"],
+            max_tokens=params["max_tokens"],
+            model_type=params["model_type"],
+            system_message=system_message  # Pass the enhanced system message
+        )
+        
+        if response.success:
+            return response.content
+        else:
+            logging.error(f"Error processing {drawing_type} drawing: {response.error}")
+            raise Exception(f"Error processing {drawing_type} drawing: {response.error}")
+    except Exception as e:
+        logging.error(f"Error processing {drawing_type} drawing: {str(e)}")
+        raise

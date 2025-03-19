@@ -9,14 +9,22 @@ DRAWING_TYPES = {
     'Civil': ['C', 'CD'],
     'Low Voltage': ['LV', 'LD'],
     'Fire Alarm': ['FA', 'FD'],
-    'Kitchen': ['K', 'KD']
+    'Kitchen': ['K', 'KD'],
+    'Specifications': ['SPEC', 'SP']
 }
 
 def get_drawing_type(filename: str) -> str:
     """
     Detect the drawing type by examining the first 1-2 letters of the filename.
     """
-    prefix = os.path.basename(filename).split('.')[0][:2].upper()
+    basename = os.path.basename(filename).upper()
+    
+    # Check if it's a specification document first
+    if "SPEC" in basename or "SPECIFICATION" in basename:
+        return "Specifications"
+        
+    # Otherwise check by prefixes
+    prefix = basename.split('.')[0][:2].upper()
     for dtype, prefixes in DRAWING_TYPES.items():
         if any(prefix.startswith(p.upper()) for p in prefixes):
             return dtype

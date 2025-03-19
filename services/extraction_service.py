@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Tuple
 import logging
 import asyncio
+import os
 
 import pymupdf as fitz
 
@@ -198,6 +199,65 @@ class PyMuPdfExtractor(PdfExtractor):
                     self.logger.warning(f"Error finding tables on page {i+1}: {str(e)}")
             
             return raw_text, tables, metadata
+
+    async def save_page_as_image(self, file_path: str, page_num: int, output_path: str, dpi: int = 300) -> str:
+        """
+        Save a PDF page as an image.
+        
+        Args:
+            file_path: Path to the PDF file
+            page_num: Page number to extract (0-based)
+            output_path: Path to save the image
+            dpi: DPI for the rendered image (default: 300)
+            
+        Returns:
+            Path to the saved image
+            
+        Raises:
+            FileNotFoundError: If the file does not exist
+            IndexError: If the page number is out of range
+            Exception: For any other errors during extraction
+        """
+        try:
+            if not os.path.exists(file_path):
+                self.logger.error(f"File not found: {file_path}")
+                raise FileNotFoundError(f"File not found: {file_path}")
+                
+            # Use run_in_executor to move CPU-bound work off the main thread
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, self._save_page_as_image, file_path, page_num, output_path, dpi
+            )
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"Error saving page as image: {str(e)}")
+            raise
+            
+    def _save_page_as_image(self, file_path: str, page_num: int, output_path: str, dpi: int = 300) -> str:
+        """
+        Internal method to save a PDF page as an image.
+        This method runs in a separate thread.
+        
+        Args:
+            file_path: Path to the PDF file
+            page_num: Page number to extract (0-based)
+            output_path: Path to save the image
+            dpi: DPI for the rendered image
+            
+        Returns:
+            Path to the saved image
+        """
+        with fitz.open(file_path) as doc:
+            if page_num < 0 or page_num >= len(doc):
+                raise IndexError(f"Page number {page_num} out of range (0-{len(doc)-1})")
+                
+            page = doc[page_num]
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
+            pixmap.save(output_path)
+            
+            self.logger.info(f"Saved page {page_num} as image: {output_path}")
+            return output_path
 
 
 class ArchitecturalExtractor(PyMuPdfExtractor):
