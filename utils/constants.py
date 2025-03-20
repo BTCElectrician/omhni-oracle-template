@@ -19,15 +19,16 @@ def get_drawing_type(filename: str) -> str:
     """
     basename = os.path.basename(filename).upper()
     
-    # Check if it's a specification document first
-    if "SPEC" in basename or "SPECIFICATION" in basename:
-        return "Specifications"
-        
-    # Otherwise check by prefixes
+    # Check by prefixes FIRST
     prefix = basename.split('.')[0][:2].upper()
     for dtype, prefixes in DRAWING_TYPES.items():
         if any(prefix.startswith(p.upper()) for p in prefixes):
             return dtype
+            
+    # Only use Specifications as a fallback if we couldn't determine by prefix
+    if "SPEC" in basename or "SPECIFICATION" in basename:
+        return "Specifications"
+        
     return 'General'
 
 def get_drawing_subtype(filename: str) -> str:
