@@ -529,8 +529,8 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
 
 class ModelType(Enum):
     """Enumeration of supported AI model types."""
-    GPT_4O_MINI = "gpt-4o-mini-2024-07-18"
-    GPT_4O = "gpt-4o-2024-05-13"  # Added to support higher capability needs
+    GPT_4O_MINI = "gpt-4o-mini"  # Updated to remove date-specific version
+    GPT_4O = "gpt-4o"  # Updated to remove date-specific version
 
 def optimize_model_parameters(
     drawing_type: str,
@@ -561,8 +561,10 @@ def optimize_model_parameters(
     if content_length > 50000 or "specification" in drawing_type.lower():
         params["model_type"] = ModelType.GPT_4O
         # Calculate max_tokens dynamically based on content length
-        # GPT-4o has context limit of 16384 tokens (input + output combined)
-        params["max_tokens"] = max(8000, min(14000, 16384 - (len(raw_content) // 4)))
+        # Estimate token count as roughly chars/4 for English text
+        estimated_input_tokens = min(128000, len(raw_content) // 4)  # Cap at 128k tokens maximum
+        # Reserve at least 8000 tokens for output, but don't exceed model context limits
+        params["max_tokens"] = max(8000, min(14000, 32000 - estimated_input_tokens))
     
     # Adjust based on drawing type
     if "Electrical" in drawing_type:
@@ -589,7 +591,11 @@ def optimize_model_parameters(
         params["temperature"] = 0.05
         params["model_type"] = ModelType.GPT_4O
         # Use dynamic calculation for specifications as well
-        params["max_tokens"] = max(8000, min(14000, 16384 - (len(raw_content) // 4)))
+        estimated_input_tokens = min(128000, len(raw_content) // 4)
+        params["max_tokens"] = max(8000, min(14000, 32000 - estimated_input_tokens))
+    
+    # Safety check: ensure max_tokens is within reasonable limits
+    params["max_tokens"] = min(params["max_tokens"], 16000)
     
     logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} and max_tokens {params['max_tokens']}")
     
@@ -882,7 +888,16 @@ class DrawingAiService:
         # Use the provided system message or fall back to default
         final_system_message = system_message if system_message else default_system_message
         
-        self.logger.info(f"Processing content of length {len(raw_content)} with model {model_type.value}")
+        content_length = len(raw_content)
+        self.logger.info(f"Processing content of length {content_length} with model {model_type.value}")
+
+        # Check if content is too large and log a warning
+        if content_length > 250000 and model_type == ModelType.GPT_4O_MINI:
+            self.logger.warning(f"Content length ({content_length} chars) may exceed GPT-4o-mini context window. Switching to GPT-4o.")
+            model_type = ModelType.GPT_4O
+        
+        if content_length > 500000:
+            self.logger.warning(f"Content length ({content_length} chars) exceeds GPT-4o context window. Processing may be incomplete.")
 
         try:
             messages = [
@@ -898,27 +913,43 @@ class DrawingAiService:
             # Add the actual content to process
             messages.append({"role": "user", "content": raw_content})
             
-            response = await self.client.chat.completions.create(
-                model=model_type.value,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"}  # Ensure JSON response
-            )
-            content = response.choices[0].message.content
+            # Calculate rough token estimate for logging
+            estimated_tokens = content_length // 4
+            self.logger.info(f"Estimated input tokens: ~{estimated_tokens}")
             
             try:
-                # Validate JSON parsing
-                parsed_content = json.loads(content)
-                if not self.validate_json(parsed_content):
-                    self.logger.warning("JSON validation failed - missing required keys")
-                    # Still return the content, as it might be usable even with missing keys
+                response = await self.client.chat.completions.create(
+                    model=model_type.value,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format={"type": "json_object"}  # Ensure JSON response
+                )
+                content = response.choices[0].message.content
                 
-                return content
-            except json.JSONDecodeError as e:
-                self.logger.error(f"JSON decoding error: {str(e)}")
-                self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
-                raise
+                # Process usage information if available
+                if hasattr(response, 'usage') and response.usage:
+                    self.logger.info(f"Token usage - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}")
+                
+                try:
+                    # Validate JSON parsing
+                    parsed_content = json.loads(content)
+                    if not self.validate_json(parsed_content):
+                        self.logger.warning("JSON validation failed - missing required keys")
+                        # Still return the content, as it might be usable even with missing keys
+                    
+                    return content
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"JSON decoding error: {str(e)}")
+                    self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
+                    raise
+            except Exception as e:
+                if "maximum context length" in str(e).lower() or "token limit" in str(e).lower():
+                    self.logger.error(f"Context length exceeded: {str(e)}")
+                    raise ValueError(f"Content too large for model context window: {str(e)}")
+                else:
+                    self.logger.error(f"API error: {str(e)}")
+                    raise
         except Exception as e:
             self.logger.error(f"Error processing drawing: {str(e)}")
             raise
@@ -984,18 +1015,33 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
         
     Returns:
         Structured JSON as a string
+        
+    Raises:
+        ValueError: If the content is too large for processing
+        JSONDecodeError: If the response is not valid JSON
+        Exception: For other processing errors
     """
+    if not raw_content:
+        logging.warning(f"Empty content received for {file_name}. Cannot process.")
+        raise ValueError("Cannot process empty content")
+        
+    # Log details about processing task
+    content_length = len(raw_content)
+    drawing_type = drawing_type or "Unknown"
+    file_name = file_name or "Unknown"
+    
+    logging.info(f"Starting drawing processing: Type={drawing_type}, File={file_name}, Content length={content_length}")
+    
     try:
         # Detect more specific drawing subtype
         subtype = detect_drawing_subtype(drawing_type, file_name)
+        logging.info(f"Detected drawing subtype: {subtype}")
         
         # Create the AI service
         ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
         
         # Get optimized parameters for this drawing
         params = optimize_model_parameters(subtype, raw_content, file_name)
-        
-        logging.info(f"Processing {subtype} drawing with {len(raw_content)} characters")
         
         # Try to get an example output for few-shot learning
         example_output = await ai_service.get_example_output(subtype)
@@ -1045,18 +1091,35 @@ async def process_drawing(raw_content: str, drawing_type: str, client, file_name
             """
         
         # Process the drawing using the most appropriate method
-        response = await ai_service.process_with_prompt(
-            raw_content=raw_content,
-            temperature=params["temperature"],
-            max_tokens=params["max_tokens"],
-            model_type=params["model_type"],
-            system_message=system_message,
-            example_output=example_output
-        )
-        
-        return response
+        try:
+            response = await ai_service.process_with_prompt(
+                raw_content=raw_content,
+                temperature=params["temperature"],
+                max_tokens=params["max_tokens"],
+                model_type=params["model_type"],
+                system_message=system_message,
+                example_output=example_output
+            )
+            
+            # Validate JSON structure
+            try:
+                parsed = json.loads(response)
+                logging.info(f"Successfully processed {subtype} drawing ({len(response)} chars output)")
+                return response
+            except json.JSONDecodeError:
+                logging.error(f"Invalid JSON response from AI service for {file_name}")
+                raise
+                
+        except ValueError as e:
+            if "content too large" in str(e).lower():
+                logging.error(f"Content too large for {file_name}: {str(e)}")
+                raise ValueError(f"Drawing content exceeds model context limits: {str(e)}")
+            else:
+                logging.error(f"Value error processing {file_name}: {str(e)}")
+                raise
+                
     except Exception as e:
-        logging.error(f"Error processing {drawing_type} drawing: {str(e)}")
+        logging.error(f"Error processing {drawing_type} drawing '{file_name}': {str(e)}")
         raise
 
 @time_operation("ai_processing")
@@ -1073,18 +1136,34 @@ async def process_drawing_with_examples(raw_content: str, drawing_type: str, cli
         
     Returns:
         Structured JSON as a string
+        
+    Raises:
+        ValueError: If the content is too large for processing
+        JSONDecodeError: If the response is not valid JSON
+        Exception: For other processing errors
     """
+    if not raw_content:
+        logging.warning(f"Empty content received for {file_name}. Cannot process.")
+        raise ValueError("Cannot process empty content")
+    
+    # Log details about the processing task
+    content_length = len(raw_content)
+    drawing_type = drawing_type or "Unknown"
+    file_name = file_name or "Unknown"
+    
+    logging.info(f"Starting drawing processing with examples: Type={drawing_type}, File={file_name}, Content length={content_length}")
+    logging.info(f"Number of example outputs provided: {len(example_outputs) if example_outputs else 0}")
+    
     try:
         # Detect more specific drawing subtype
         subtype = detect_drawing_subtype(drawing_type, file_name)
+        logging.info(f"Detected drawing subtype: {subtype}")
         
         # Create the AI service
         ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
         
         # Get optimized parameters for this drawing
         params = optimize_model_parameters(subtype, raw_content, file_name)
-        
-        logging.info(f"Processing {subtype} drawing with {len(raw_content)} characters using examples")
         
         # Check if this is a specification document
         is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
@@ -1111,22 +1190,41 @@ async def process_drawing_with_examples(raw_content: str, drawing_type: str, cli
         """
         
         # Process using the examples-based approach
-        if example_outputs and len(example_outputs) > 0:
-            # Use first example only as some APIs have token limits
-            example = example_outputs[0]
-            response = await ai_service.process_with_prompt(
-                raw_content=raw_content,
-                temperature=params["temperature"],
-                max_tokens=params["max_tokens"],
-                model_type=params["model_type"],
-                system_message=system_message,
-                example_output=example
-            )
-        else:
-            # No examples provided, fall back to standard processing
-            response = await process_drawing(raw_content, drawing_type, client, file_name)
+        try:
+            if example_outputs and len(example_outputs) > 0:
+                # Use first example only as some APIs have token limits
+                example = example_outputs[0]
+                logging.info("Processing with example-based learning")
+                response = await ai_service.process_with_prompt(
+                    raw_content=raw_content,
+                    temperature=params["temperature"],
+                    max_tokens=params["max_tokens"],
+                    model_type=params["model_type"],
+                    system_message=system_message,
+                    example_output=example
+                )
+            else:
+                # No examples provided, fall back to standard processing
+                logging.info("No examples provided, falling back to standard processing")
+                response = await process_drawing(raw_content, drawing_type, client, file_name)
+            
+            # Validate JSON structure
+            try:
+                parsed = json.loads(response)
+                logging.info(f"Successfully processed {subtype} drawing with examples ({len(response)} chars output)")
+                return response
+            except json.JSONDecodeError:
+                logging.error(f"Invalid JSON response from AI service for {file_name}")
+                raise
         
-        return response
+        except ValueError as e:
+            if "content too large" in str(e).lower():
+                logging.error(f"Content too large for {file_name}: {str(e)}")
+                raise ValueError(f"Drawing content exceeds model context limits: {str(e)}")
+            else:
+                logging.error(f"Value error processing {file_name}: {str(e)}")
+                raise
+        
     except Exception as e:
-        logging.error(f"Error processing {drawing_type} drawing with examples: {str(e)}")
+        logging.error(f"Error processing {drawing_type} drawing '{file_name}' with examples: {str(e)}")
         raise
