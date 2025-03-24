@@ -35,26 +35,53 @@ DRAWING_INSTRUCTIONS = {
     """,
     
     "Mechanical": """
-    Capture ALL mechanical equipment information with extreme detail and precision:
-    
-    1. Complete equipment schedules with:
-       - Model numbers, manufacturers, and dimensions
-       - Capacities (CFM, BTU, tonnage)
-       - Electrical requirements (voltage, phase, FLA)
-       - Mounting details and clearance requirements
-    
-    2. HVAC specifications:
-       - Airflow volumes and static pressures
-       - Control requirements and sequence of operations
-       - Ductwork specifications and sizing
-    
-    3. Installation instructions:
-       - Mounting heights and clearances
-       - Connection requirements (electrical, plumbing, controls)
-       - Testing and balancing requirements
-       
-    IMPORTANT: ALL mechanical information must be captured with exact values - don't round or approximate.
-    Engineers rely on these precise specifications for proper system operation.
+    Extract ALL mechanical information with a simplified, comprehensive structure.
+
+1. Create a straightforward JSON structure with these main categories:
+   - "equipment": Object containing arrays of ALL mechanical equipment grouped by type
+   - "systems": Information about ductwork, piping, and distribution systems
+   - "notes": ALL notes, specifications, and requirements
+   - "remarks": ALL remarks and numbered references
+
+2. For ANY type of equipment (air handlers, fans, VAVs, pumps, etc.):
+   - Group by equipment type using descriptive keys (airHandlers, exhaustFans, chillers, etc.)
+   - Include EVERY specification field with its EXACT value - never round or approximate
+   - Use camelCase field names based on original headers
+   - Always include identification (tag/ID), manufacturer, model, and capacity information
+   - Capture ALL performance data (CFM, tonnage, BTU, static pressure, etc.)
+   - Include ALL electrical characteristics (voltage, phase, FLA, MCA, etc.)
+
+3. For ALL mechanical information:
+   - Preserve EXACT values - never round or approximate
+   - Include units of measurement
+   - Keep the structure flat and simple
+   - Don't skip ANY information shown on the drawing
+
+Example simplified structure:
+{
+  "equipment": {
+    "airHandlingUnits": [
+      {
+        "id": "AHU-1",
+        "manufacturer": "Trane",
+        "model": "M-Series",
+        "cfm": "10,000",
+        // ALL other fields exactly as shown
+      }
+    ],
+    "exhaustFans": [
+      // ALL fan data with EVERY field
+    ]
+  },
+  "notes": [
+    // ALL notes and specifications
+  ],
+  "remarks": [
+    // ALL remarks and references
+  ]
+}
+
+CRITICAL: Engineers need EVERY mechanical element and specification value EXACTLY as shown - complete accuracy is essential for proper system design, ordering, and installation.
     """,
     
     "Plumbing": """
@@ -584,6 +611,20 @@ def optimize_model_parameters(
             params["temperature"] = 0.1
             if content_length > 20000:
                 params["model_type"] = ModelType.GPT_4O
+    
+    # For mechanical drawings (schedules, equipment, etc.)
+    elif "Mechanical" in drawing_type:
+        # Increase temperature for more flexible processing of mechanical information
+        params["temperature"] = 0.3
+        
+        # For mechanical schedules, ensure adequate token allocation
+        if any(term in file_name.lower() for term in ["schedule", "equip"]):
+            params["max_tokens"] = min(params["max_tokens"], 8000)
+            
+            # For complex mechanical schedules, consider using more powerful model
+            if content_length > 20000:
+                params["model_type"] = ModelType.GPT_4O
+                logging.info(f"Using GPT-4o for complex mechanical schedule: {file_name}")
     
     # For specifications, use more powerful model and lower temperature
     if "SPECIFICATION" in file_name.upper() or "Specifications" in drawing_type:
