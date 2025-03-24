@@ -138,26 +138,38 @@ CRITICAL: Engineers need EVERY mechanical element and specification value EXACTL
     """,
     
     "Specifications": """
-    PRESERVE THE COMPLETE CONTENT of each specification section with its EXACT structure and details.
-    
-    For each specification section:
-    
-    1. Create objects in the 'specifications' array with:
-       - 'section_title': The complete section number and title (e.g., "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS")
-       - 'content': The FULL TEXT of the entire section, including ALL parts, subsections, and items
-    
-    2. Maintain the exact hierarchical structure:
-       - Preserve all SECTION > PART > SUBSECTION relationships
-       - Keep all numbering and lettering of items (1., 1.1, A., etc.)
-       - Include all indentation and formatting
-    
-    3. Include EVERY paragraph, table, list, and requirement:
-       - Do not summarize or truncate any content
-       - Maintain all technical details, values, and specifications
-       - Preserve all notes, warnings, and special instructions
-    
-    CRITICAL: The entire text must be preserved exactly as written. Even minor omissions or changes 
-    can alter contract requirements and cause legal issues.
+Extract specification content using a clean, direct structure.
+
+1. Create a straightforward 'specifications' array containing objects with:
+   - 'section_title': EXACT section number and title (e.g., "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS")
+   - 'content': COMPLETE text of the section with ALL parts and subsections
+   
+2. For the 'content' field:
+   - Preserve the EXACT text - no summarizing or paraphrasing
+   - Maintain ALL hierarchical structure (PART > SECTION > SUBSECTION)
+   - Keep ALL numbering and lettering (1.1, A., etc.)
+   - Include ALL paragraphs, tables, lists, and requirements
+
+3. DO NOT add interpretations, summaries, or analysis
+   - Your ONLY task is to preserve the original text in the correct sections
+   - The structure should be simple and flat (just title + content for each section)
+   - Handle each section as a complete unit
+
+Example structure:
+{
+  "specifications": [
+    {
+      "section_title": "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS",
+      "content": "PART 1 - GENERAL\\n\\n1.1 RELATED DOCUMENTS\\n\\nA. DRAWINGS AND GENERAL PROVISIONS...\\n\\n[COMPLETE TEXT HERE]"
+    },
+    {
+      "section_title": "SECTION 16123 - BUILDING WIRE AND CABLE",
+      "content": "PART 1 GENERAL\\n\\n1.01 SECTION INCLUDES\\n\\nA. WIRE AND CABLE...\\n\\n[COMPLETE TEXT HERE]"
+    }
+  ]
+}
+
+CRITICAL: Construction decisions rely on complete, unaltered specifications. Even minor omissions or changes can cause legal and safety issues.
     """,
     
     "General": """
@@ -511,6 +523,11 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
     
     file_name_lower = file_name.lower()
     
+    # Enhanced specification detection - check this first for efficiency
+    if "specification" in drawing_type.lower() or any(term in file_name_lower for term in 
+                                                   ["spec", "specification", ".spec", "e0.01"]):
+        return "Specifications"
+    
     # Electrical subtypes
     if drawing_type == "Electrical":
         # Panel schedules - check for these first as they're most specific
@@ -546,10 +563,6 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
         # Architectural details
         elif any(term in file_name_lower for term in ["detail", "section", "elevation", "assembly"]):
             return "Architectural_Details"
-    
-    # Specification documents
-    elif "specification" in drawing_type.lower() or "spec" in file_name_lower:
-        return "Specifications"
     
     # If no subtype detected, return the main type
     return drawing_type
@@ -629,11 +642,21 @@ def optimize_model_parameters(
     # For specifications, use more powerful model and lower temperature
     if "SPECIFICATION" in file_name.upper() or "Specifications" in drawing_type:
         logging.info(f"Processing specification document ({content_length} chars)")
-        params["temperature"] = 0.05
-        params["model_type"] = ModelType.GPT_4O
-        # Use dynamic calculation for specifications as well
-        estimated_input_tokens = min(128000, len(raw_content) // 4)
-        params["max_tokens"] = max(8000, min(14000, 32000 - estimated_input_tokens))
+        
+        # Use a slightly higher temperature - reduces "overthinking" while maintaining accuracy
+        params["temperature"] = 0.2
+        
+        # Implement smart model selection based on content length
+        if content_length < 30000:  # For shorter specifications
+            params["model_type"] = ModelType.GPT_4O_MINI
+            logging.info(f"Using GPT-4o-mini for shorter specification document: {file_name}")
+        else:
+            params["model_type"] = ModelType.GPT_4O
+            logging.info(f"Using GPT-4o for complex specification document: {file_name}")
+        
+        # Calculate max_tokens more efficiently
+        estimated_input_tokens = min(100000, len(raw_content) // 4)
+        params["max_tokens"] = max(6000, min(12000, 28000 - estimated_input_tokens))
     
     # Safety check: ensure max_tokens is within reasonable limits
     params["max_tokens"] = min(params["max_tokens"], 16000)
