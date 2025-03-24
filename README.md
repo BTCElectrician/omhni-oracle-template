@@ -51,6 +51,28 @@ Environment variables in `.env`:
 - `BATCH_SIZE`: PDFs to process in parallel (default: 10)
 - `API_RATE_LIMIT`: Max API calls per time window (default: 60)
 - `TIME_WINDOW`: Time window in seconds (default: 60)
+- `FORCE_MINI_MODEL`: Set to "true" to force using GPT-4o-mini for all documents (default: false)
+
+### Model Selection
+
+By default, the system intelligently selects between GPT-4o-mini and GPT-4o based on:
+- Document type (specifications always use GPT-4o)
+- Content length (longer documents use GPT-4o)
+- Drawing complexity
+
+Setting `FORCE_MINI_MODEL=true` bypasses this logic and always uses GPT-4o-mini, which:
+- Processes documents faster
+- Costs less per document
+- May reduce quality for complex documents
+
+To test both models and compare results:
+```bash
+# Process with normal model selection
+python main.py /path/to/drawings /path/to/output-normal
+
+# Process with forced mini model
+FORCE_MINI_MODEL=true python main.py /path/to/drawings /path/to/output-mini
+```
 
 ## Output
 

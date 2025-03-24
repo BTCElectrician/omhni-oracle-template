@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, TypeVar, Generic, List
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from utils.performance_utils import time_operation
+from dotenv import load_dotenv
 
 # Drawing type-specific instructions with main types and subtypes
 DRAWING_INSTRUCTIONS = {
@@ -588,6 +589,11 @@ def optimize_model_parameters(
     Returns:
         Dictionary of optimized parameters
     """
+    from dotenv import load_dotenv
+    load_dotenv(override=True)  # Reload to ensure we get the latest env values
+    
+    from config.settings import get_force_mini_model  # Import the function instead
+    
     content_length = len(raw_content)
     
     # Default parameters
@@ -596,6 +602,11 @@ def optimize_model_parameters(
         "temperature": 0.1,  # Reduced default temperature for more consistent output
         "max_tokens": 16000,
     }
+    
+    # Force mini model if flag is set - this will override all other logic
+    if get_force_mini_model():
+        logging.info(f"Forcing gpt-4o-mini model for testing: {file_name}")
+        return params
     
     # For very long content or complex documents, use more powerful model
     if content_length > 50000 or "specification" in drawing_type.lower():

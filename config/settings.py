@@ -24,6 +24,15 @@ TIME_WINDOW = int(os.getenv('TIME_WINDOW', '60'))
 # Processing Mode Configuration
 USE_SIMPLIFIED_PROCESSING = os.getenv('USE_SIMPLIFIED_PROCESSING', 'false').lower() == 'true'
 
+# Model Selection Configuration - Define as a function to reload each time
+def get_force_mini_model():
+    """Always reload from env to get the latest value"""
+    load_dotenv(override=True)
+    return os.getenv('FORCE_MINI_MODEL', 'false').lower() == 'true'
+
+# Standard definition for backward compatibility
+FORCE_MINI_MODEL = get_force_mini_model()
+
 # Template Configuration
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
 
@@ -39,5 +48,6 @@ def get_all_settings() -> Dict[str, Any]:
         "TIME_WINDOW": TIME_WINDOW,
         "TEMPLATE_DIR": TEMPLATE_DIR,
         "DEBUG_MODE": DEBUG_MODE,
-        "USE_SIMPLIFIED_PROCESSING": USE_SIMPLIFIED_PROCESSING
+        "USE_SIMPLIFIED_PROCESSING": USE_SIMPLIFIED_PROCESSING,
+        "FORCE_MINI_MODEL": get_force_mini_model()  # Always get latest value
     }

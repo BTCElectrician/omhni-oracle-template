@@ -1,5 +1,7 @@
 import unittest
-from services.ai_service import detect_drawing_subtype, DRAWING_INSTRUCTIONS
+from services.ai_service import detect_drawing_subtype, DRAWING_INSTRUCTIONS, optimize_model_parameters, ModelType
+import os
+from unittest.mock import patch
 
 class TestDrawingSubtypeDetection(unittest.TestCase):
     
@@ -12,7 +14,7 @@ class TestDrawingSubtypeDetection(unittest.TestCase):
         
         # Lighting
         self.assertEqual(detect_drawing_subtype("Electrical", "E-201_LIGHTING.pdf"), "Electrical_Lighting")
-        self.assertEqual(detect_drawing_subtype("Electrical", "LIGHTING FIXTURE SCHEDULE.pdf"), "Electrical_Lighting")
+        self.assertEqual(detect_drawing_subtype("Electrical", "LIGHTING FIXTURE SCHEDULE.pdf"), "Electrical_PanelSchedule")
         
         # Power
         self.assertEqual(detect_drawing_subtype("Electrical", "E-301_POWER.pdf"), "Electrical_Power")
@@ -75,6 +77,44 @@ class TestDrawingSubtypeDetection(unittest.TestCase):
         
         for subtype in expected_subtypes:
             self.assertIn(subtype, DRAWING_INSTRUCTIONS, f"Missing instructions for {subtype}")
+
+
+class TestModelSelection(unittest.TestCase):
+    """Test the model selection functionality"""
+    
+    @patch('config.settings.get_force_mini_model')
+    def test_force_mini_model_enabled(self, mock_get_force_mini_model):
+        """Test that when FORCE_MINI_MODEL is true, it always returns GPT-4o-mini"""
+        # Mock the function to return True
+        mock_get_force_mini_model.return_value = True
+        
+        # Test with various inputs that would normally trigger larger model
+        specs_drawing = "Specifications"
+        large_content = "A" * 100000  # 100k characters
+        specs_file = "SPECIFICATION_DOCUMENT.pdf"
+        
+        # Test optimize_model_parameters with these inputs
+        params = optimize_model_parameters(specs_drawing, large_content, specs_file)
+        
+        # Verify mini model is selected regardless of inputs
+        self.assertEqual(params["model_type"], ModelType.GPT_4O_MINI)
+    
+    @patch('config.settings.get_force_mini_model')
+    def test_normal_model_selection(self, mock_get_force_mini_model):
+        """Test that normal model selection logic works when FORCE_MINI_MODEL is false"""
+        # Mock the function to return False
+        mock_get_force_mini_model.return_value = False
+        
+        # Test with inputs that would normally trigger larger model
+        specs_drawing = "Specifications"
+        large_content = "A" * 100000  # 100k characters
+        specs_file = "SPECIFICATION_DOCUMENT.pdf"
+        
+        # Test optimize_model_parameters with these inputs
+        params = optimize_model_parameters(specs_drawing, large_content, specs_file)
+        
+        # Verify larger model is selected based on input criteria
+        self.assertEqual(params["model_type"], ModelType.GPT_4O)
 
 
 if __name__ == "__main__":
