@@ -6,6 +6,14 @@ from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from utils.performance_utils import time_operation
 from dotenv import load_dotenv
+from templates.prompt_types import (
+    DrawingCategory, 
+    ArchitecturalSubtype, 
+    ElectricalSubtype,
+    MechanicalSubtype,
+    PlumbingSubtype
+)
+from templates.prompt_templates import get_prompt_template
 
 # Drawing type-specific instructions with main types and subtypes
 DRAWING_INSTRUCTIONS = {
@@ -527,43 +535,70 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
     # Enhanced specification detection - check this first for efficiency
     if "specification" in drawing_type.lower() or any(term in file_name_lower for term in 
                                                    ["spec", "specification", ".spec", "e0.01"]):
-        return "Specifications"
+        return DrawingCategory.SPECIFICATIONS.value
     
     # Electrical subtypes
-    if drawing_type == "Electrical":
-        # Panel schedules - check for these first as they're most specific
+    if drawing_type == DrawingCategory.ELECTRICAL.value:
+        # Panel schedules
         if any(term in file_name_lower for term in ["panel", "schedule", "panelboard", "circuit", "h1", "l1", "k1", "k1s", "21lp-1", "20h-1"]):
-            return "Electrical_PanelSchedule"
+            return f"{drawing_type}_{ElectricalSubtype.PANEL_SCHEDULE.value}"
         # Lighting fixtures and controls
         elif any(term in file_name_lower for term in ["light", "lighting", "fixture", "lamp", "luminaire", "rcp", "ceiling"]):
-            return "Electrical_Lighting"
+            return f"{drawing_type}_{ElectricalSubtype.LIGHTING.value}"
         # Power distribution
         elif any(term in file_name_lower for term in ["power", "outlet", "receptacle", "equipment", "connect", "riser", "metering"]):
-            return "Electrical_Power"
+            return f"{drawing_type}_{ElectricalSubtype.POWER.value}"
         # Fire alarm systems
         elif any(term in file_name_lower for term in ["fire", "alarm", "fa", "detection", "smoke", "emergency", "evacuation"]):
-            return "Electrical_FireAlarm"
+            return f"{drawing_type}_{ElectricalSubtype.FIREALARM.value}"
         # Low voltage systems
         elif any(term in file_name_lower for term in ["tech", "data", "comm", "security", "av", "low voltage", "telecom", "network"]):
-            return "Electrical_Technology"
+            return f"{drawing_type}_{ElectricalSubtype.TECHNOLOGY.value}"
+        # Specifications
+        elif any(term in file_name_lower for term in ["spec", "specification", "requirement"]):
+            return f"{drawing_type}_{ElectricalSubtype.SPEC.value}"
     
     # Architectural subtypes
-    elif drawing_type == "Architectural":
+    elif drawing_type == DrawingCategory.ARCHITECTURAL.value:
         # Reflected ceiling plans
         if any(term in file_name_lower for term in ["rcp", "ceiling", "reflected"]):
-            return "Architectural_ReflectedCeiling"
+            return f"{drawing_type}_{ArchitecturalSubtype.CEILING.value}"
         # Wall types and partitions
         elif any(term in file_name_lower for term in ["partition", "wall type", "wall-type", "wall", "room wall"]):
-            return "Architectural_Partition"
+            return f"{drawing_type}_{ArchitecturalSubtype.WALL.value}"
         # Floor plans
         elif any(term in file_name_lower for term in ["floor", "plan", "layout", "room"]):
-            return "Architectural_FloorPlan"
+            return f"{drawing_type}_{ArchitecturalSubtype.ROOM.value}"
         # Door and window schedules
         elif any(term in file_name_lower for term in ["door", "window", "hardware", "schedule"]):
-            return "Architectural_Schedules"
+            return f"{drawing_type}_{ArchitecturalSubtype.DOOR.value}"
         # Architectural details
         elif any(term in file_name_lower for term in ["detail", "section", "elevation", "assembly"]):
-            return "Architectural_Details"
+            return f"{drawing_type}_{ArchitecturalSubtype.DETAIL.value}"
+    
+    # Mechanical subtypes
+    elif drawing_type == DrawingCategory.MECHANICAL.value:
+        # Equipment schedules
+        if any(term in file_name_lower for term in ["equip", "unit", "ahu", "rtu", "vav", "schedule"]):
+            return f"{drawing_type}_{MechanicalSubtype.EQUIPMENT.value}"
+        # Ventilation systems
+        elif any(term in file_name_lower for term in ["vent", "air", "supply", "return", "diffuser", "grille"]):
+            return f"{drawing_type}_{MechanicalSubtype.VENTILATION.value}"
+        # Piping systems
+        elif any(term in file_name_lower for term in ["pipe", "chilled", "heating", "cooling", "refrigerant"]):
+            return f"{drawing_type}_{MechanicalSubtype.PIPING.value}"
+    
+    # Plumbing subtypes
+    elif drawing_type == DrawingCategory.PLUMBING.value:
+        # Fixture schedules
+        if any(term in file_name_lower for term in ["fixture", "sink", "toilet", "shower", "schedule"]):
+            return f"{drawing_type}_{PlumbingSubtype.FIXTURE.value}"
+        # Equipment
+        elif any(term in file_name_lower for term in ["equip", "heater", "pump", "water", "schedule"]):
+            return f"{drawing_type}_{PlumbingSubtype.EQUIPMENT.value}"
+        # Piping systems
+        elif any(term in file_name_lower for term in ["pipe", "riser", "water", "sanitary", "vent"]):
+            return f"{drawing_type}_{PlumbingSubtype.PIPE.value}"
     
     # If no subtype detected, return the main type
     return drawing_type
@@ -744,47 +779,16 @@ class DrawingAiService:
 
     def _get_default_system_message(self, drawing_type: str) -> str:
         """
-        Get the default system message for the given drawing type.
+        Get the default system message for the given drawing type with few-shot examples.
         
         Args:
             drawing_type: Type of drawing (Architectural, Electrical, etc.) or subtype
-            
+                
         Returns:
-            System message string
+            System message string with examples
         """
-        # Try to get instructions for the specific subtype first
-        drawing_instruction = self.drawing_instructions.get(
-            drawing_type,
-            # If subtype not found and it contains an underscore, try the main type
-            self.drawing_instructions.get(
-                drawing_type.split('_')[0] if '_' in drawing_type else "",
-                # Fall back to general instructions
-                self.drawing_instructions.get("General", "")
-            )
-        )
-        
-        return f"""
-        You are a construction drawing expert tasked with extracting complete, detailed information from the provided content.
-        Your job is to structure this information into a comprehensive, well-organized JSON object with these sections:
-        
-        - 'metadata': Include drawing number, title, date, revision, and any other identifying information.
-        - 'schedules': Array of schedules with type and data. Use consistent field names for similar data across different schedules.
-        - 'notes': Array of notes and annotations found in the drawing.
-        - 'specifications': Array of specification sections with 'section_title' and 'content' fields.
-        - 'rooms': For architectural drawings, include an array of rooms with detailed information.
-        - Additional sections as appropriate for the specific drawing type.
-        
-        {drawing_instruction}
-        
-        CRITICAL REQUIREMENTS:
-        1. Extract ALL information from the drawing - nothing should be omitted
-        2. Structure data consistently with descriptive field names
-        3. For unclear or ambiguous information, include it with a note about the uncertainty
-        4. Ensure the output is valid JSON - no malformed structures or syntax errors
-        5. For architectural drawings, ALWAYS include a 'rooms' array when room information is present
-        
-        Accurate and complete extraction is essential - construction decisions will be based on this data.
-        """
+        # Use the new prompt template module to get the appropriate template
+        return get_prompt_template(drawing_type)
 
     @retry(
         stop=stop_after_attempt(3),
