@@ -1,12 +1,12 @@
 import os
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from tqdm.asyncio import tqdm
 
-from services.extraction_service import PyMuPdfExtractor
+from services.extraction_service import PyMuPdfExtractor, ExtractionResult
 from services.storage_service import FileSystemStorage
-from services.ai_service import DrawingAiService, AiRequest, ModelType
+from services.ai_service import DrawingAiService, AiRequest, ModelType, optimize_model_parameters
 
 # If you have a performance decorator, you can add it here if desired
 # from utils.performance_utils import time_operation
@@ -80,6 +80,54 @@ def normalize_panel_data_fields(panel_data: Dict[str, Any]) -> Dict[str, Any]:
     panel_data["circuits"] = new_circuits
     return panel_data
 
+async def process_panel_schedule_content_async(
+    extraction_result: ExtractionResult,
+    client,
+    file_name: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Process panel schedule content from an extraction result.
+    
+    Args:
+        extraction_result: Result of PDF extraction containing text and tables
+        client: OpenAI client
+        file_name: Name of the file (for logging purposes)
+        
+    Returns:
+        Processed panel data dictionary or None if processing failed
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(f"Processing panel schedule content for {file_name}")
+
+    try:
+        tables = extraction_result.tables
+        raw_text = extraction_result.raw_text
+
+        if tables:
+            logger.info(f"Found {len(tables)} table(s). Using table-based parsing for {file_name}.")
+            panels_data = await _parse_tables_without_chunking(tables, client, logger)
+        else:
+            logger.warning(f"No tables found in {file_name}—fallback to raw text approach.")
+            panels_data = await _fallback_raw_text(raw_text, client, logger)
+
+        if not panels_data:
+            logger.warning(f"No panel data extracted from {file_name}.")
+            return None
+
+        # Return the first panel if there's only one, otherwise return the array
+        if len(panels_data) == 1:
+            return normalize_panel_data_fields(panels_data[0])
+        else:
+            # For multiple panels, create a parent object
+            result = {
+                "panels": [normalize_panel_data_fields(panel) for panel in panels_data]
+            }
+            return result
+
+    except Exception as ex:
+        logger.error(f"Unhandled error processing panel schedule content for {file_name}: {str(ex)}")
+        return None
+
 async def process_panel_schedule_pdf_async(
     pdf_path: str,
     client,
@@ -109,16 +157,13 @@ async def process_panel_schedule_pdf_async(
                 logger.error(err)
                 return {"success": False, "error": err, "file": pdf_path}
 
-            tables = extraction_result.tables
-            raw_text = extraction_result.raw_text
-
-            if tables:
-                logger.info(f"Found {len(tables)} table(s) in {file_name}. Using table-based parsing.")
-                panels_data = await _parse_tables_without_chunking(tables, client, logger)
-            else:
-                logger.warning(f"No tables found in {file_name}—fallback to raw text approach.")
-                panels_data = await _fallback_raw_text(raw_text, client, logger)
-
+            # Process the content
+            panels_data = await process_panel_schedule_content_async(
+                extraction_result=extraction_result,
+                client=client,
+                file_name=file_name
+            )
+            
             pbar.update(60)
             if not panels_data:
                 logger.warning(f"No panel data extracted from {file_name}.")
@@ -182,15 +227,20 @@ Return valid JSON with:
     { "circuit": "...", "load_name": "...", "trip": "...", "poles": "...", ... }
   ]
 }
+CRITICAL: Ensure ALL property names (keys) in the JSON output are enclosed in double quotes.
 Ensure ALL circuits are documented EXACTLY as shown. Missing or incomplete information can cause dangerous installation errors.
     """.strip()
 
     # Process the entire set of tables as a single unit
     user_text = f"FULL PANEL SCHEDULE TABLES:\n{combined_tables}"
 
+    # Determine model type for table-based processing - Using GPT_4O_MINI as default
+    selected_model_type = ModelType.GPT_4O_MINI
+    logger.info(f"Using default model {selected_model_type.value} for panel schedule table processing.")
+
     request = AiRequest(
         content=user_text,
-        model_type=None,  # Let the service determine the appropriate model
+        model_type=selected_model_type,  # Use the determined model type
         temperature=0.05,  # Use lowest temperature for precision
         max_tokens=4000,
         system_message=system_prompt
@@ -212,6 +262,7 @@ Ensure ALL circuits are documented EXACTLY as shown. Missing or incomplete infor
         return all_panels
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error on combined tables: {str(e)}")
+        logger.error(f"Raw problematic content: {response.content[:500]}...")
         return []
 
 async def _fallback_raw_text(raw_text: str, client, logger: logging.Logger) -> List[Dict[str, Any]]:
@@ -246,35 +297,40 @@ Return a valid JSON object with:
   ]
 }
 
+CRITICAL: Ensure ALL property names (keys) in the JSON output are enclosed in double quotes.
 CRITICAL: Missing circuits or incorrect information can lead to dangerous installation errors.
     """.strip()
-
-    # Process the entire content as a single unit
-    user_text = f"PANEL SCHEDULE RAW TEXT:\n{raw_text}"
-
+    
+    # Determine model type for fallback - Using GPT_4O_MINI as default
+    # Alternatively, could call optimize_model_parameters here if needed,
+    # but a default is simpler for the fallback path.
+    selected_model_type = ModelType.GPT_4O_MINI
+    logger.info(f"Using default model {selected_model_type.value} for panel schedule fallback.")
+    
     request = AiRequest(
-        content=user_text,
-        model_type=None,  # Let the service determine the appropriate model
+        content=raw_text,
+        model_type=selected_model_type, # Use the determined model type
         temperature=0.05,  # Use lowest temperature for precision
         max_tokens=4000,
         system_message=fallback_prompt
     )
-
+    
     response = await ai_service.process(request)
     if not response.success or not response.content:
-        logger.warning(f"GPT parse error in fallback processing: {response.error}")
+        logger.warning(f"GPT parse error on raw text: {response.error}")
         return []
-
+    
     try:
-        fallback_data = json.loads(response.content)
-        # Normalize synonyms
-        fallback_data = normalize_panel_data_fields(fallback_data)
-
-        # If no circuits or panel name found, return empty list
-        if not fallback_data.get("panel_name") and not fallback_data.get("circuits"):
-            return []
-
-        return [fallback_data]
+        panel_json = json.loads(response.content)
+        # Normalize fields
+        panel_json = normalize_panel_data_fields(panel_json)
+        # If we found circuits or a panel name, add it
+        all_panels = []
+        if panel_json.get("panel_name") or panel_json.get("circuits"):
+            all_panels.append(panel_json)
+        
+        return all_panels
     except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error in fallback processing: {str(e)}")
+        logger.error(f"JSON decode error on raw text: {str(e)}")
+        logger.error(f"Raw problematic content: {response.content[:500]}...")
         return []

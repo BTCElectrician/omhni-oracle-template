@@ -6,7 +6,7 @@ import asyncio
 
 from dotenv import load_dotenv
 from processing.file_processor import is_panel_schedule
-from utils.pdf_processor import extract_text_and_tables_from_pdf
+from services.extraction_service import PyMuPdfExtractor
 
 def setup_logging():
     logging.basicConfig(
@@ -38,6 +38,8 @@ async def main():
     output_folder = os.path.join(os.getcwd(), "test_output")
     os.makedirs(output_folder, exist_ok=True)
 
+    extractor = PyMuPdfExtractor(logger=logging.getLogger())
+
     for pdf_path in pdf_files:
         file_name = os.path.basename(pdf_path)
 
@@ -45,12 +47,26 @@ async def main():
             logging.info(f"Detected panel schedule in '{file_name}'.")
             try:
                 # Extract with PyMuPDF (async call)
-                raw_content = await extract_text_and_tables_from_pdf(pdf_path)
-                result_data = {
-                    "extracted_content": raw_content,
-                    "error": None
-                }
-                logging.info(f"Successfully processed '{file_name}'.")
+                extraction_result = await extractor.extract(pdf_path)
+                
+                if extraction_result.success:
+                    # Format the content like the old function did
+                    all_content = "TEXT:\n" + extraction_result.raw_text + "\n"
+                    for table in extraction_result.tables:
+                        all_content += "TABLE:\n"
+                        all_content += table["content"] + "\n"
+                    
+                    result_data = {
+                        "extracted_content": all_content,
+                        "error": None
+                    }
+                    logging.info(f"Successfully processed '{file_name}'.")
+                else:
+                    result_data = {
+                        "extracted_content": "",
+                        "error": extraction_result.error
+                    }
+                    logging.error(f"Extraction failed: {extraction_result.error}")
             except Exception as e:
                 logging.exception(f"Error: {e}")
                 result_data = {"extracted_content": "", "error": str(e)}
