@@ -21,6 +21,7 @@ CRITICAL INSTRUCTIONS:
 2. PRESERVE original terminology and organization
 3. GROUP similar elements together in logical sections
 4. DOCUMENT all specifications and detailed information
+5. Ensure your entire response is a single, valid JSON object.
 
 {industry_context}
 """
@@ -43,6 +44,7 @@ CRITICAL INSTRUCTIONS:
 3. INCLUDE all technical specifications and requirements 
 4. ADAPT the structure to match this specific drawing
 5. MAINTAIN the overall hierarchical organization shown in the example
+6. Format your output as a complete, valid JSON object.
 
 {stake_holders} rely on this information for {use_case}.
 Complete accuracy is essential for {critical_purpose}.
@@ -70,7 +72,7 @@ def create_schedule_template(
     use_case,
     critical_purpose
 ):
-    """Create a schedule prompt template with the provided parameters."""
+    """Create a schedule template with the provided parameters."""
     return SCHEDULE_TEMPLATE.format(
         schedule_type=schedule_type,
         drawing_category=drawing_category,

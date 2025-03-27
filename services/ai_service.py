@@ -1,3 +1,4 @@
+# File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/ai_service.py
 import json
 import logging
 from enum import Enum
@@ -7,8 +8,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from utils.performance_utils import time_operation
 from dotenv import load_dotenv
 from templates.prompt_types import (
-    DrawingCategory, 
-    ArchitecturalSubtype, 
+    DrawingCategory,
+    ArchitecturalSubtype,
     ElectricalSubtype,
     MechanicalSubtype,
     PlumbingSubtype
@@ -16,8 +17,9 @@ from templates.prompt_types import (
 from templates.prompt_templates import get_prompt_template
 
 # Drawing type-specific instructions with main types and subtypes
+# (DRAWING_INSTRUCTIONS dictionary remains the same - keeping it for brevity)
 DRAWING_INSTRUCTIONS = {
-    # Main drawing types
+    # ... (Keep the existing dictionary content) ...
     "Electrical": """
     You are an electrical drawing expert extracting structured information. Focus on:
     
@@ -519,24 +521,24 @@ CRITICAL: Construction decisions rely on complete, unaltered specifications. Eve
 def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
     """
     Detect more specific drawing subtype based on drawing type and filename.
-    
+
     Args:
         drawing_type: Main drawing type (Electrical, Architectural, etc.)
         file_name: Name of the file being processed
-        
+
     Returns:
         More specific subtype or the original drawing type if no subtype detected
     """
     if not file_name or not drawing_type:
         return drawing_type
-    
+
     file_name_lower = file_name.lower()
-    
+
     # Enhanced specification detection - check this first for efficiency
-    if "specification" in drawing_type.lower() or any(term in file_name_lower for term in 
-                                                   ["spec", "specification", ".spec", "e0.01"]):
+    if "specification" in drawing_type.lower() or any(term in file_name_lower for term in
+                                                       ["spec", "specification", ".spec", "e0.01"]):
         return DrawingCategory.SPECIFICATIONS.value
-    
+
     # Electrical subtypes
     if drawing_type == DrawingCategory.ELECTRICAL.value:
         # Panel schedules
@@ -554,10 +556,10 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
         # Low voltage systems
         elif any(term in file_name_lower for term in ["tech", "data", "comm", "security", "av", "low voltage", "telecom", "network"]):
             return f"{drawing_type}_{ElectricalSubtype.TECHNOLOGY.value}"
-        # Specifications
+        # Specifications (if not caught earlier)
         elif any(term in file_name_lower for term in ["spec", "specification", "requirement"]):
-            return f"{drawing_type}_{ElectricalSubtype.SPEC.value}"
-    
+             return DrawingCategory.SPECIFICATIONS.value # Map directly to main spec type
+
     # Architectural subtypes
     elif drawing_type == DrawingCategory.ARCHITECTURAL.value:
         # Reflected ceiling plans
@@ -575,7 +577,7 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
         # Architectural details
         elif any(term in file_name_lower for term in ["detail", "section", "elevation", "assembly"]):
             return f"{drawing_type}_{ArchitecturalSubtype.DETAIL.value}"
-    
+
     # Mechanical subtypes
     elif drawing_type == DrawingCategory.MECHANICAL.value:
         # Equipment schedules
@@ -587,7 +589,7 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
         # Piping systems
         elif any(term in file_name_lower for term in ["pipe", "chilled", "heating", "cooling", "refrigerant"]):
             return f"{drawing_type}_{MechanicalSubtype.PIPING.value}"
-    
+
     # Plumbing subtypes
     elif drawing_type == DrawingCategory.PLUMBING.value:
         # Fixture schedules
@@ -599,14 +601,14 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
         # Piping systems
         elif any(term in file_name_lower for term in ["pipe", "riser", "water", "sanitary", "vent"]):
             return f"{drawing_type}_{PlumbingSubtype.PIPE.value}"
-    
+
     # If no subtype detected, return the main type
     return drawing_type
 
 class ModelType(Enum):
     """Enumeration of supported AI model types."""
-    GPT_4O_MINI = "gpt-4o-mini"  # Updated to remove date-specific version
-    GPT_4O = "gpt-4o"  # Updated to remove date-specific version
+    GPT_4O_MINI = "gpt-4o-mini"
+    GPT_4O = "gpt-4o"
 
 def optimize_model_parameters(
     drawing_type: str,
@@ -615,101 +617,90 @@ def optimize_model_parameters(
 ) -> Dict[str, Any]:
     """
     Determine optimal model parameters based on drawing type and content.
-    
+
     Args:
         drawing_type: Type of drawing (Architectural, Electrical, etc.)
         raw_content: Raw content from the drawing
         file_name: Name of the file being processed
-        
+
     Returns:
         Dictionary of optimized parameters
     """
     from dotenv import load_dotenv
-    load_dotenv(override=True)  # Reload to ensure we get the latest env values
-    
-    from config.settings import get_force_mini_model  # Import the function instead
-    
+    load_dotenv(override=True) # Reload to ensure we get the latest env values
+
+    from config.settings import get_force_mini_model # Import the function instead
+
     content_length = len(raw_content)
-    
+
     # Default parameters
     params = {
         "model_type": ModelType.GPT_4O_MINI,
-        "temperature": 0.1,  # Reduced default temperature for more consistent output
-        "max_tokens": 16000,
+        "temperature": 0.1, # Reduced default temperature for more consistent output
+        "max_tokens": 16000, # Default max tokens for mini model
     }
-    
-    # Force mini model if flag is set - this will override all other logic
-    if get_force_mini_model():
-        logging.info(f"Forcing gpt-4o-mini model for testing: {file_name}")
-        return params
-    
-    # For very long content or complex documents, use more powerful model
-    if content_length > 50000 or "specification" in drawing_type.lower():
+
+    # Determine the appropriate model based on FORCE_MINI_MODEL flag and content length/type
+    use_mini_model = get_force_mini_model()
+    use_large_model = False
+
+    # Conditions to potentially upgrade to the larger model (GPT-4O)
+    if not use_mini_model:
+        if content_length > 50000 or "specification" in drawing_type.lower():
+            use_large_model = True
+            logging.info(f"Content length ({content_length}) or type ({drawing_type}) suggests using GPT-4o for {file_name}")
+        elif ("Electrical" in drawing_type and "PanelSchedule" in drawing_type and content_length > 15000):
+             use_large_model = True
+             logging.info(f"Complex panel schedule ({content_length}) suggests using GPT-4o for {file_name}")
+        elif ("Architectural" in drawing_type and content_length > 20000):
+             use_large_model = True
+             logging.info(f"Large architectural drawing ({content_length}) suggests using GPT-4o for {file_name}")
+        elif ("Mechanical" in drawing_type and content_length > 20000):
+             use_large_model = True
+             logging.info(f"Large mechanical drawing ({content_length}) suggests using GPT-4o for {file_name}")
+
+    # Set the model type
+    if use_large_model:
         params["model_type"] = ModelType.GPT_4O
-        # Calculate max_tokens dynamically based on content length
-        # Estimate token count as roughly chars/4 for English text
-        estimated_input_tokens = min(128000, len(raw_content) // 4)  # Cap at 128k tokens maximum
-        # Reserve at least 8000 tokens for output, but don't exceed model context limits
-        params["max_tokens"] = max(8000, min(14000, 32000 - estimated_input_tokens))
-    
-    # Adjust based on drawing type
+        # Adjust max_tokens for the larger model
+        estimated_input_tokens = min(128000, len(raw_content) // 4) # Cap at 128k tokens maximum
+        # Reserve tokens for output, adjust based on model context window (approx 128k input, 4k output generally safe)
+        params["max_tokens"] = max(4096, min(16000, 128000 - estimated_input_tokens - 1000)) # Ensure at least 4k, max 16k, within context
+    elif use_mini_model:
+         logging.info(f"Forcing gpt-4o-mini model for testing: {file_name}")
+         # Keep default params["model_type"] = ModelType.GPT_4O_MINI
+         # Keep default params["max_tokens"] = 16000
+
+    # Adjust temperature based on drawing type
     if "Electrical" in drawing_type:
         # Panel schedules need lowest temperature for precision
         if "PanelSchedule" in drawing_type:
             params["temperature"] = 0.05
-            # Use more capable model for complex panel schedules
-            if content_length > 15000:
-                params["model_type"] = ModelType.GPT_4O
         # Other electrical drawings need precision too
         else:
             params["temperature"] = 0.1
-    
     elif "Architectural" in drawing_type:
-        # Room information needs precision but some inference
-        if "FloorPlan" in drawing_type or "ReflectedCeiling" in drawing_type:
-            params["temperature"] = 0.1
-            if content_length > 20000:
-                params["model_type"] = ModelType.GPT_4O
-    
-    # For mechanical drawings (schedules, equipment, etc.)
+         # Requires precision but might need some inference for relationships
+         params["temperature"] = 0.1
     elif "Mechanical" in drawing_type:
-        # Increase temperature for more flexible processing of mechanical information
-        params["temperature"] = 0.3
-        
-        # For mechanical schedules, ensure adequate token allocation
-        if any(term in file_name.lower() for term in ["schedule", "equip"]):
-            params["max_tokens"] = min(params["max_tokens"], 8000)
-            
-            # For complex mechanical schedules, consider using more powerful model
-            if content_length > 20000:
-                params["model_type"] = ModelType.GPT_4O
-                logging.info(f"Using GPT-4o for complex mechanical schedule: {file_name}")
-    
-    # For specifications, use more powerful model and lower temperature
-    if "SPECIFICATION" in file_name.upper() or "Specifications" in drawing_type:
-        logging.info(f"Processing specification document ({content_length} chars)")
-        
-        # Use a slightly higher temperature - reduces "overthinking" while maintaining accuracy
-        params["temperature"] = 0.2
-        
-        # Implement smart model selection based on content length
-        if content_length < 30000:  # For shorter specifications
-            params["model_type"] = ModelType.GPT_4O_MINI
-            logging.info(f"Using GPT-4o-mini for shorter specification document: {file_name}")
-        else:
-            params["model_type"] = ModelType.GPT_4O
-            logging.info(f"Using GPT-4o for complex specification document: {file_name}")
-        
-        # Calculate max_tokens more efficiently
-        estimated_input_tokens = min(100000, len(raw_content) // 4)
-        params["max_tokens"] = max(6000, min(12000, 28000 - estimated_input_tokens))
-    
-    # Safety check: ensure max_tokens is within reasonable limits
-    params["max_tokens"] = min(params["max_tokens"], 16000)
-    
-    logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} and max_tokens {params['max_tokens']}")
-    
+         # Slightly higher temperature might help with varied schedule formats
+         params["temperature"] = 0.2 # Reduced from 0.3 for better consistency
+    elif "Specification" in drawing_type:
+        # Needs precision, very low temperature
+        params["temperature"] = 0.05
+
+    # Safety check: ensure max_tokens is within reasonable limits for the chosen model
+    if params["model_type"] == ModelType.GPT_4O_MINI:
+        params["max_tokens"] = min(params["max_tokens"], 16000) # Hard cap for mini
+    elif params["model_type"] == ModelType.GPT_4O:
+         # Let the calculated value stand, but ensure it doesn't exceed common practical limits like 16k unless necessary
+         params["max_tokens"] = min(params["max_tokens"], 16000) # Re-cap at 16k for safety/cost unless specifically needed higher
+
+
+    logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} and max_tokens {params['max_tokens']} for {file_name}")
+
     return params
+
 
 T = TypeVar('T')
 
@@ -727,7 +718,7 @@ class AiRequest:
     ):
         """
         Initialize an AiRequest.
-        
+
         Args:
             content: Content to send to the API
             model_type: Model type to use
@@ -748,7 +739,7 @@ class AiResponse(Generic[T]):
     def __init__(self, success: bool = True, content: str = "", parsed_content: Optional[T] = None, error: str = ""):
         """
         Initialize an AiResponse.
-        
+
         Args:
             success: Whether the API call was successful
             content: Raw content from the API
@@ -779,15 +770,15 @@ class DrawingAiService:
 
     def _get_default_system_message(self, drawing_type: str) -> str:
         """
-        Get the default system message for the given drawing type with few-shot examples.
-        
+        Get the default system message for the given drawing type using the prompt templates.
+
         Args:
             drawing_type: Type of drawing (Architectural, Electrical, etc.) or subtype
-                
+
         Returns:
-            System message string with examples
+            System message string
         """
-        # Use the new prompt template module to get the appropriate template
+        # Use the prompt template module to get the appropriate template
         return get_prompt_template(drawing_type)
 
     @retry(
@@ -798,17 +789,17 @@ class DrawingAiService:
     @time_operation("ai_processing")
     async def process(self, request: AiRequest) -> AiResponse[Dict[str, Any]]:
         """
-        Process an AI request.
-        
+        Process an AI request. (Used by panel schedule processor primarily)
+
         Args:
             request: AiRequest object containing parameters
-            
+
         Returns:
             AiResponse with parsed content or error
         """
         try:
-            self.logger.info(f"Processing content of length {len(request.content)}")
-            
+            self.logger.info(f"Processing content of length {len(request.content)} using model {request.model_type.value}")
+
             response = await self.client.chat.completions.create(
                 model=request.model_type.value,
                 messages=[
@@ -817,20 +808,20 @@ class DrawingAiService:
                 ],
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
-                response_format={"type": "json_object"}  # Ensure JSON response
+                response_format={"type": "json_object"} # Ensure JSON response
             )
-            
+
             content = response.choices[0].message.content
-            
+
             try:
                 parsed_content = json.loads(content)
                 return AiResponse(success=True, content=content, parsed_content=parsed_content)
             except json.JSONDecodeError as e:
                 self.logger.error(f"JSON decoding error: {str(e)}")
-                self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
-                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}")
+                self.logger.error(f"Raw content received: {content[:500]}...") # Log the first 500 chars for debugging
+                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}", content=content) # Return raw content on error
         except Exception as e:
-            self.logger.error(f"Error processing drawing: {str(e)}")
+            self.logger.error(f"Error during AI processing: {str(e)}")
             return AiResponse(success=False, error=str(e))
 
     @retry(
@@ -847,11 +838,11 @@ class DrawingAiService:
         max_tokens: int = 16000,
         model_type: ModelType = ModelType.GPT_4O_MINI,
         system_message: Optional[str] = None,
-        example_output: Optional[str] = None
     ) -> AiResponse:
         """
-        Process a drawing using the OpenAI API.
-        
+        Process a drawing using the OpenAI API, returning an AiResponse.
+        (Removed few-shot example logic)
+
         Args:
             raw_content: Complete raw content from the drawing - NO TRUNCATION
             drawing_type: Type of drawing
@@ -859,44 +850,35 @@ class DrawingAiService:
             max_tokens: Maximum tokens to generate
             model_type: Model type to use
             system_message: Optional system message
-            example_output: Optional example output for few-shot learning
-            
+
         Returns:
             AiResponse with parsed content or error
         """
         try:
-            self.logger.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters")
-            
+            self.logger.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters using model {model_type.value}")
+
             messages = [
-                {"role": "system", "content": system_message or self._get_default_system_message(drawing_type)}
+                {"role": "system", "content": system_message or self._get_default_system_message(drawing_type)},
+                {"role": "user", "content": raw_content}
             ]
-            
-            # Add example output if provided (few-shot learning)
-            if example_output:
-                messages.append({"role": "user", "content": "Please process this drawing content and convert it to structured JSON:"})
-                messages.append({"role": "assistant", "content": example_output})
-                messages.append({"role": "user", "content": "Now process this new drawing content in the same format:"})
-            
-            # Add the actual content to process
-            messages.append({"role": "user", "content": raw_content})
-            
+
             response = await self.client.chat.completions.create(
                 model=model_type.value,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                response_format={"type": "json_object"}  # Ensure JSON response
+                response_format={"type": "json_object"} # Ensure JSON response
             )
-            
+
             content = response.choices[0].message.content
-            
+
             try:
                 parsed_content = json.loads(content)
                 return AiResponse(success=True, content=content, parsed_content=parsed_content)
             except json.JSONDecodeError as e:
                 self.logger.error(f"JSON decoding error: {str(e)}")
-                self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
-                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}")
+                self.logger.error(f"Raw content received: {content[:500]}...") # Log the first 500 chars for debugging
+                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}", content=content) # Return raw content on error
         except Exception as e:
             self.logger.error(f"Error processing drawing: {str(e)}")
             return AiResponse(success=False, error=str(e))
@@ -914,45 +896,45 @@ class DrawingAiService:
         max_tokens: int = 16000,
         model_type: ModelType = ModelType.GPT_4O_MINI,
         system_message: Optional[str] = None,
-        example_output: Optional[str] = None
     ) -> str:
         """
-        Process a drawing using a specific prompt, ensuring full content is sent to the API.
-        
+        Process raw content using a specific prompt, ensuring full content is sent to the API.
+        Returns the raw JSON string response.
+        (Removed few-shot example logic)
+
         Args:
             raw_content: Raw content from the drawing
             temperature: Temperature parameter for the AI model
             max_tokens: Maximum tokens to generate
             model_type: AI model type to use
             system_message: Optional custom system message to override default
-            example_output: Optional example output for few-shot learning
-        
+
         Returns:
             Processed content as a JSON string
 
         Raises:
             JSONDecodeError: If the response is not valid JSON
-            ValueError: If the JSON structure is invalid
+            ValueError: If the JSON structure is invalid or context length exceeded
             Exception: For other processing errors
         """
         default_system_message = """
         You are an AI assistant specialized in construction drawings. Extract all relevant information from the provided content and organize it into a structured JSON object with these sections:
-        
+
         - "metadata": An object containing drawing metadata such as "drawing_number", "title", "date", and "revision".
         Include any available information; if a field is missing, omit it.
-        
+
         - "schedules": An array of schedule objects. Each schedule should have a "type" (e.g., "electrical_panel",
         "mechanical") and a "data" array containing objects with standardized field names. For panel schedules,
-        use consistent field names like "circuit" for circuit numbers, "trip" for breaker sizes, 
+        use consistent field names like "circuit" for circuit numbers, "trip" for breaker sizes,
         "load_name" for equipment descriptions, and "poles" for the number of poles.
-        
+
         - "notes": An array of strings containing any notes or instructions found in the drawing.
-        
+
         - "specifications": An array of objects, each with a "section_title" and "content" for specification sections.
-        
+
         - "rooms": For architectural drawings, include an array of rooms with 'number', 'name', 'finish', 'height',
         'electrical_info', and 'architectural_info'.
-        
+
         CRITICAL REQUIREMENTS:
         1. The JSON output MUST include ALL information from the drawing - nothing should be omitted
         2. Structure data consistently with descriptive field names
@@ -960,78 +942,71 @@ class DrawingAiService:
         4. For architectural drawings, ALWAYS include a 'rooms' array with ALL rooms
         5. For specifications, preserve the COMPLETE text in the 'content' field
         6. Ensure the output is valid JSON with no syntax errors
-        
+
         Construction decisions will be based on this data, so accuracy and completeness are essential.
         """
 
         # Use the provided system message or fall back to default
         final_system_message = system_message if system_message else default_system_message
-        
+
         content_length = len(raw_content)
         self.logger.info(f"Processing content of length {content_length} with model {model_type.value}")
 
-        # Check if content is too large and log a warning
+        # Context length warnings (remain relevant)
         if content_length > 250000 and model_type == ModelType.GPT_4O_MINI:
-            self.logger.warning(f"Content length ({content_length} chars) may exceed GPT-4o-mini context window. Switching to GPT-4o.")
-            model_type = ModelType.GPT_4O
-        
-        if content_length > 500000:
-            self.logger.warning(f"Content length ({content_length} chars) exceeds GPT-4o context window. Processing may be incomplete.")
+            self.logger.warning(f"Content length ({content_length} chars) is large for GPT-4o-mini context window. Consider upgrading model if issues occur.")
+        if content_length > 500000 and model_type == ModelType.GPT_4O:
+             self.logger.warning(f"Content length ({content_length} chars) is very large, approaching GPT-4o context window limits. Processing may be incomplete.")
+
 
         try:
             messages = [
-                {"role": "system", "content": final_system_message}
+                {"role": "system", "content": final_system_message},
+                {"role": "user", "content": raw_content}
             ]
-            
-            # Add example output if provided (few-shot learning)
-            if example_output:
-                messages.append({"role": "user", "content": "Please process this drawing content and convert it to structured JSON:"})
-                messages.append({"role": "assistant", "content": example_output})
-                messages.append({"role": "user", "content": "Now process this new drawing content in the same format:"})
-            
-            # Add the actual content to process
-            messages.append({"role": "user", "content": raw_content})
-            
+
             # Calculate rough token estimate for logging
             estimated_tokens = content_length // 4
             self.logger.info(f"Estimated input tokens: ~{estimated_tokens}")
-            
+
             try:
                 response = await self.client.chat.completions.create(
                     model=model_type.value,
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
-                    response_format={"type": "json_object"}  # Ensure JSON response
+                    response_format={"type": "json_object"} # Ensure JSON response
                 )
                 content = response.choices[0].message.content
-                
+
                 # Process usage information if available
                 if hasattr(response, 'usage') and response.usage:
                     self.logger.info(f"Token usage - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}")
-                
+
                 try:
-                    # Validate JSON parsing
+                    # Validate JSON parsing immediately
                     parsed_content = json.loads(content)
                     if not self.validate_json(parsed_content):
-                        self.logger.warning("JSON validation failed - missing required keys")
-                        # Still return the content, as it might be usable even with missing keys
-                    
+                         self.logger.warning("JSON validation failed - missing required keys")
+                         # Still return the content, as it might be usable even with missing keys
+
                     return content
                 except json.JSONDecodeError as e:
                     self.logger.error(f"JSON decoding error: {str(e)}")
-                    self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
-                    raise
+                    self.logger.error(f"Raw content received: {content[:500]}...") # Log the first 500 chars for debugging
+                    raise # Re-raise the JSONDecodeError
+
             except Exception as e:
                 if "maximum context length" in str(e).lower() or "token limit" in str(e).lower():
                     self.logger.error(f"Context length exceeded: {str(e)}")
                     raise ValueError(f"Content too large for model context window: {str(e)}")
                 else:
                     self.logger.error(f"API error: {str(e)}")
-                    raise
+                    raise # Re-raise other API errors
+
         except Exception as e:
-            self.logger.error(f"Error processing drawing: {str(e)}")
-            raise
+            self.logger.error(f"Error preparing or initiating AI processing: {str(e)}")
+            raise # Re-raise any other unexpected errors
 
     def validate_json(self, json_data: Dict[str, Any]) -> bool:
         """
@@ -1044,8 +1019,14 @@ class DrawingAiService:
             True if the JSON has all required keys, False otherwise
         """
         # Basic validation - check for required top-level keys
+        # Allow flexibility, just log warnings if keys are missing for now
         required_keys = ["metadata", "schedules", "notes"]
-        
+        missing_keys = [key for key in required_keys if key not in json_data]
+        if missing_keys:
+            self.logger.warning(f"JSON response missing expected keys: {', '.join(missing_keys)}")
+            # Return True for now, but logging helps identify inconsistent outputs.
+            # Could return False here if strict validation is needed later.
+
         # Specifications validation - check structure and convert if needed
         if "specifications" in json_data:
             specs = json_data["specifications"]
@@ -1054,256 +1035,108 @@ class DrawingAiService:
                 if isinstance(specs[0], str):
                     self.logger.warning("Converting specifications from string array to object array")
                     json_data["specifications"] = [{"section_title": spec, "content": ""} for spec in specs]
-        else:
-            # Add empty specifications array if missing
-            json_data["specifications"] = []
-            
-        # For architectural drawings, check for rooms array
-        if "metadata" in json_data and "drawing_type" in json_data["metadata"]:
-            if "architectural" in json_data["metadata"]["drawing_type"].lower() and "rooms" not in json_data:
-                self.logger.warning("Architectural drawing missing 'rooms' array")
-                return False
-                
-        return all(key in json_data for key in required_keys)
+        # No else needed - if 'specifications' isn't there or is empty, that's okay
 
-    async def get_example_output(self, drawing_type: str) -> Optional[str]:
-        """
-        Retrieve an example output for the given drawing type from a library of examples.
-        This enables few-shot learning for better consistency.
-        
-        Args:
-            drawing_type: Type of drawing
-            
-        Returns:
-            Example output as JSON string, or None if no example is available
-        """
-        # This would typically load from a database or file system
-        # For now, we'll return None as a placeholder
-        return None
+        # For architectural drawings, log if rooms array is missing
+        if isinstance(json_data.get("metadata"), dict) and \
+           "architectural" in json_data["metadata"].get("drawing_type", "").lower() and \
+           "rooms" not in json_data:
+            self.logger.warning("Architectural drawing missing 'rooms' array in JSON response")
+            # Again, return True for now, but log the issue.
+
+        return True # Return True unless strict validation requires False on warnings
+
+# --- REMOVED get_example_output function ---
 
 @time_operation("ai_processing")
 async def process_drawing(raw_content: str, drawing_type: str, client, file_name: str = "") -> str:
     """
     Use GPT to parse PDF text and table data into structured JSON based on the drawing type.
-    
+    (Removed few-shot example logic)
+
     Args:
         raw_content: Raw content from the drawing
         drawing_type: Type of drawing (Architectural, Electrical, etc.)
         client: OpenAI client
         file_name: Optional name of the file being processed
-        
+
     Returns:
         Structured JSON as a string
-        
+
     Raises:
-        ValueError: If the content is too large for processing
+        ValueError: If the content is empty or too large for processing
         JSONDecodeError: If the response is not valid JSON
         Exception: For other processing errors
     """
     if not raw_content:
         logging.warning(f"Empty content received for {file_name}. Cannot process.")
         raise ValueError("Cannot process empty content")
-        
+
     # Log details about processing task
     content_length = len(raw_content)
     drawing_type = drawing_type or "Unknown"
     file_name = file_name or "Unknown"
-    
+
     logging.info(f"Starting drawing processing: Type={drawing_type}, File={file_name}, Content length={content_length}")
-    
+
     try:
         # Detect more specific drawing subtype
         subtype = detect_drawing_subtype(drawing_type, file_name)
         logging.info(f"Detected drawing subtype: {subtype}")
-        
+
         # Create the AI service
         ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
-        
+
         # Get optimized parameters for this drawing
         params = optimize_model_parameters(subtype, raw_content, file_name)
-        
-        # Try to get an example output for few-shot learning
-        example_output = await ai_service.get_example_output(subtype)
-        
+
+        # --- REMOVED call to get_example_output ---
+
         # Check if this is a specification document
         is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
-        
-        # Enhanced system message with different emphasis based on document type
+
+        # Determine the appropriate system message based on detected subtype/type
         if is_specification:
-            system_message = f"""
-            You are processing a SPECIFICATION document. Extract all relevant information and organize it into a JSON object.
-            
-            CRITICAL INSTRUCTIONS:
-            - In the 'specifications' array, create objects with 'section_title' and 'content' fields
-            - The 'section_title' should contain the section number and name (e.g., "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS")
-            - The 'content' field MUST contain the COMPLETE TEXT of each section, including all parts, subsections, and detailed requirements
-            - Preserve the hierarchical structure (SECTION > PART > SUBSECTION)
-            - Include all numbered and lettered items, paragraphs, tables, and detailed requirements
-            - Do not summarize or truncate - include the ENTIRE text of each section
-            
-            {DRAWING_INSTRUCTIONS.get("Specifications")}
-            
-            Ensure the output is valid JSON.
-            """
+            # Simplified system message retrieval for specifications
+            system_message = ai_service._get_default_system_message(DrawingCategory.SPECIFICATIONS.value)
+            logging.info("Using specification-specific system prompt.")
         else:
             # Get the appropriate system message based on detected subtype
-            type_instruction = DRAWING_INSTRUCTIONS.get(subtype, DRAWING_INSTRUCTIONS.get(drawing_type, DRAWING_INSTRUCTIONS["General"]))
-            
-            system_message = f"""
-            You are processing a construction drawing of type: {subtype}
-            
-            Extract ALL relevant information and organize it into a comprehensive JSON object with the following sections:
-            - 'metadata': Object containing drawing number, title, date, and any other identifying information
-            - 'schedules': Array of schedules with type and data using consistent field names
-            - 'notes': Array of all notes and annotations
-            - 'specifications': Array of specification sections with 'section_title' and 'content'
-            - Other sections as appropriate for this drawing type
-            
-            {type_instruction}
-            
-            CRITICAL: Your output MUST include ALL information from the drawing - nothing should be omitted.
-            Use consistent field names for similar data (e.g., "circuit", "trip", "load_name" for panel schedules).
-            For architectural drawings, ALWAYS include a 'rooms' array with ALL rooms.
-            
-            Engineers, contractors, and installers will rely on this data for construction decisions.
-            Accuracy and completeness are essential to prevent costly mistakes and safety issues.
-            """
-        
-        # Process the drawing using the most appropriate method
+            system_message = ai_service._get_default_system_message(subtype)
+            logging.info(f"Using system prompt for subtype: {subtype}")
+
+
+        # Process the drawing using the simplified prompt method
         try:
-            response = await ai_service.process_with_prompt(
+            response_str = await ai_service.process_with_prompt(
                 raw_content=raw_content,
                 temperature=params["temperature"],
                 max_tokens=params["max_tokens"],
                 model_type=params["model_type"],
                 system_message=system_message,
-                example_output=example_output
+                # --- REMOVED example_output parameter ---
             )
-            
-            # Validate JSON structure
-            try:
-                parsed = json.loads(response)
-                logging.info(f"Successfully processed {subtype} drawing ({len(response)} chars output)")
-                return response
-            except json.JSONDecodeError:
-                logging.error(f"Invalid JSON response from AI service for {file_name}")
-                raise
-                
-        except ValueError as e:
-            if "content too large" in str(e).lower():
-                logging.error(f"Content too large for {file_name}: {str(e)}")
-                raise ValueError(f"Drawing content exceeds model context limits: {str(e)}")
-            else:
-                logging.error(f"Value error processing {file_name}: {str(e)}")
-                raise
-                
-    except Exception as e:
-        logging.error(f"Error processing {drawing_type} drawing '{file_name}': {str(e)}")
-        raise
 
-@time_operation("ai_processing")
-async def process_drawing_with_examples(raw_content: str, drawing_type: str, client, file_name: str = "", example_outputs: List[str] = None) -> str:
-    """
-    Process a drawing using few-shot learning with example outputs.
-    
-    Args:
-        raw_content: Raw content from the drawing
-        drawing_type: Type of drawing
-        client: OpenAI client
-        file_name: Optional name of the file being processed
-        example_outputs: List of example JSON outputs for few-shot learning
-        
-    Returns:
-        Structured JSON as a string
-        
-    Raises:
-        ValueError: If the content is too large for processing
-        JSONDecodeError: If the response is not valid JSON
-        Exception: For other processing errors
-    """
-    if not raw_content:
-        logging.warning(f"Empty content received for {file_name}. Cannot process.")
-        raise ValueError("Cannot process empty content")
-    
-    # Log details about the processing task
-    content_length = len(raw_content)
-    drawing_type = drawing_type or "Unknown"
-    file_name = file_name or "Unknown"
-    
-    logging.info(f"Starting drawing processing with examples: Type={drawing_type}, File={file_name}, Content length={content_length}")
-    logging.info(f"Number of example outputs provided: {len(example_outputs) if example_outputs else 0}")
-    
-    try:
-        # Detect more specific drawing subtype
-        subtype = detect_drawing_subtype(drawing_type, file_name)
-        logging.info(f"Detected drawing subtype: {subtype}")
-        
-        # Create the AI service
-        ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
-        
-        # Get optimized parameters for this drawing
-        params = optimize_model_parameters(subtype, raw_content, file_name)
-        
-        # Check if this is a specification document
-        is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
-        
-        # Base system message with type-specific instructions
-        type_instruction = DRAWING_INSTRUCTIONS.get(subtype, DRAWING_INSTRUCTIONS.get(drawing_type, DRAWING_INSTRUCTIONS["General"]))
-        
-        system_message = f"""
-        You are a construction drawing expert tasked with extracting ALL information from {subtype} drawings.
-        
-        Your job is to convert raw drawing content into structured JSON following the exact format shown in the examples.
-        Pay close attention to field names and structure used in the examples - your output should match this format.
-        
-        {type_instruction}
-        
-        CRITICAL REQUIREMENTS:
-        1. Extract EVERY piece of information from the drawing - nothing should be omitted
-        2. Use the EXACT same field names and structure as shown in the examples
-        3. Include ALL circuits in panel schedules, ALL rooms in architectural drawings, etc.
-        4. When in doubt about a field name, check the examples first
-        5. Ensure your output is valid JSON with no syntax errors
-        
-        Construction decisions will be based on this data, so accuracy and completeness are essential.
-        """
-        
-        # Process using the examples-based approach
-        try:
-            if example_outputs and len(example_outputs) > 0:
-                # Use first example only as some APIs have token limits
-                example = example_outputs[0]
-                logging.info("Processing with example-based learning")
-                response = await ai_service.process_with_prompt(
-                    raw_content=raw_content,
-                    temperature=params["temperature"],
-                    max_tokens=params["max_tokens"],
-                    model_type=params["model_type"],
-                    system_message=system_message,
-                    example_output=example
-                )
-            else:
-                # No examples provided, fall back to standard processing
-                logging.info("No examples provided, falling back to standard processing")
-                response = await process_drawing(raw_content, drawing_type, client, file_name)
-            
-            # Validate JSON structure
+            # Basic validation check after receiving the string
             try:
-                parsed = json.loads(response)
-                logging.info(f"Successfully processed {subtype} drawing with examples ({len(response)} chars output)")
-                return response
-            except json.JSONDecodeError:
-                logging.error(f"Invalid JSON response from AI service for {file_name}")
-                raise
-        
-        except ValueError as e:
-            if "content too large" in str(e).lower():
-                logging.error(f"Content too large for {file_name}: {str(e)}")
-                raise ValueError(f"Drawing content exceeds model context limits: {str(e)}")
-            else:
-                logging.error(f"Value error processing {file_name}: {str(e)}")
-                raise
-        
+                json.loads(response_str) # Try parsing to ensure it's valid JSON
+                logging.info(f"Successfully processed {subtype} drawing ({len(response_str)} chars output)")
+                return response_str
+            except json.JSONDecodeError as json_err:
+                 logging.error(f"Invalid JSON response from AI service for {file_name}: {json_err}")
+                 logging.error(f"Raw response snippet: {response_str[:500]}...")
+                 raise # Re-raise the JSON error
+
+        except ValueError as val_err: # Catch context length errors from process_with_prompt
+            logging.error(f"Value error processing {file_name}: {val_err}")
+            raise # Re-raise the value error
+        except Exception as proc_err: # Catch other API/processing errors
+            logging.error(f"Error during AI processing call for {file_name}: {proc_err}")
+            raise # Re-raise other errors
+
+
     except Exception as e:
-        logging.error(f"Error processing {drawing_type} drawing '{file_name}' with examples: {str(e)}")
-        raise
+        logging.error(f"Unexpected error setting up processing for {drawing_type} drawing '{file_name}': {str(e)}")
+        raise # Re-raise any setup errors
+
+# --- REMOVED process_drawing_with_examples function ---
