@@ -96,25 +96,66 @@ CRITICAL: Engineers need EVERY mechanical element and specification value EXACTL
     """,
     
     "Plumbing": """
-    You are extracting detailed plumbing information. Capture:
-    
-    1. Complete fixture schedules with:
-       - Manufacturer, model, and connection types
-       - Flow rates and pressure requirements
-       - Mounting details and rough-in dimensions
-    
-    2. Equipment specifications:
-       - Water heaters (capacity, recovery rate, electrical)
-       - Pumps (GPM, head pressure, electrical requirements)
-       - Special systems (medical gas, vacuum, grease interceptors)
-    
-    3. System details:
-       - Pipe sizing and materials
-       - Flow requirements and fixture counts
-       - Installation notes and special requirements
-       
-    IMPORTANT: Capture ALL plumbing elements with their complete specifications. 
-    Missing or incomplete information can lead to system failures.
+    You are an expert AI assistant extracting detailed information from plumbing drawings, schedules, and notes. Your goal is to create a comprehensive and structured JSON output containing ALL relevant information presented.
+
+    Analyze the provided text, which may include various schedules (fixtures, water heaters, pumps, valves, etc.), legends, and general notes. Structure your response into a single JSON object with the following top-level keys:
+
+    1.  `metadata`: (Object) Capture any project identifiers, drawing numbers, titles, dates, or revisions found.
+    2.  `fixture_schedule`: (Array of Objects) Extract details for EVERY item listed in the main plumbing fixture schedule(s). Include items like sinks (S1, S2, S3, HS, MS), drains (FD, FS, HD), cleanouts (WCO, FCO, CO), lavatories (SW-05), urinals (SW-03), water closets (SW-01), trap guards (TG), shock arrestors (SA), backflow preventers (DCBP), etc. For each item, include:
+        - `fixture_id`: The exact mark or identifier (e.g., "S1", "SW-05", "WCO").
+        - `description`: The full description provided.
+        - `manufacturer`: Manufacturer name, if available.
+        - `model`: Model number, if available.
+        - `mounting`: Mounting details.
+        - `connections`: (Object) Use the 'Connection Schedule' table to populate waste, vent, cold water (CW), and hot water (HW) sizes where applicable.
+        - `notes`: Any specific notes related to this fixture.
+    3.  `water_heater_schedule`: (Array of Objects) Extract details for EACH water heater (e.g., WH-1, WH-2). Include:
+        - `mark`: The exact identifier (e.g., "WH-1").
+        - `location`: Installation location.
+        - `manufacturer`: Manufacturer name.
+        - `model`: Model number.
+        - `specifications`: (Object) Capture ALL technical specs like storage_gallons, operating_water_temp, tank_dimensions, recovery_rate, electric_power, kW_input, etc.
+        - `mounting`: Mounting details (e.g., "Floor mounted").
+        - `notes`: (Array of Strings) Capture ALL general notes associated specifically with the water heater schedule.
+    4.  `pump_schedule`: (Array of Objects) Extract details for EACH pump (e.g., CP). Include:
+        - `mark`: The exact identifier (e.g., "CP").
+        - `location`: Installation location.
+        - `serves`: What the pump serves.
+        - `type`: Pump type (e.g., "IN-LINE").
+        - `gpm`: Gallons Per Minute.
+        - `tdh_ft`: Total Dynamic Head (in feet).
+        - `hp`: Horsepower.
+        - `rpm`: Max RPM.
+        - `electrical`: Volts/Phase/Cycle.
+        - `manufacturer`: Manufacturer name.
+        - `model`: Model number.
+        - `notes`: Any remarks or specific notes.
+    5.  `mixing_valve_schedule`: (Array of Objects) Extract details for EACH thermostatic mixing valve (e.g., TM). Include:
+        - `designation`: Identifier (e.g., "TM").
+        - `location`: Service location.
+        - `inlet_temp_F`: Hot water inlet temperature.
+        - `outlet_temp_F`: Blended water temperature.
+        - `pressure_drop_psi`: Pressure drop.
+        - `manufacturer`: Manufacturer name.
+        - `model`: Model number.
+        - `notes`: Full description or notes.
+    6.  `shock_absorber_schedule`: (Array of Objects) Extract details for EACH shock arrestor size listed (e.g., SA-A, SA-B,... SA-F, plus the general SA). Include:
+        - `mark`: The exact identifier (e.g., "SA-A", "SA").
+        - `fixture_units`: Applicable fixture units range.
+        - `manufacturer`: Manufacturer name.
+        - `model`: Model number.
+        - `description`: Full description if provided separately.
+    7.  `material_legend`: (Object) Capture the pipe material specifications (e.g., "SANITARY SEWER PIPING": "CAST IRON OR SCHEDULE 40 PVC").
+    8.  `general_notes`: (Array of Strings) Extract ALL numbered or lettered general notes found in the text (like notes A-T).
+    9.  `insulation_notes`: (Array of Strings) Extract ALL notes specifically related to plumbing insulation (like notes A-F).
+    10. `symbols`: (Array of Objects, Optional) If needed, extract symbol descriptions.
+    11. `abbreviations`: (Array of Objects, Optional) If needed, extract abbreviation definitions.
+
+    CRITICAL:
+    - Capture ALL items listed in EVERY schedule table or list. Do not omit any fixtures, equipment, or sizes.
+    - Extract ALL general notes and insulation notes sections completely.
+    - Preserve the exact details, model numbers, specifications, and text provided.
+    - Ensure your entire response is a single, valid JSON object adhering to this structure. Missing information can lead to system failures or installation errors.
     """,
     
     "Architectural": """

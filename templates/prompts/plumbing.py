@@ -11,29 +11,102 @@ def default_plumbing_prompt():
         drawing_type="PLUMBING",
         element_type="plumbing",
         instructions="""
-Focus on identifying and extracting ALL plumbing elements (fixtures, equipment, piping, etc.) with their specifications.
+Focus on identifying and extracting ALL plumbing elements with a comprehensive structure that includes:
+
+1. Complete fixture schedules with every fixture type (sinks, water closets, urinals, lavatories, drains, cleanouts, etc.)
+2. All equipment (water heaters, pumps, mixing valves, shock absorbers, etc.)
+3. Pipe materials and connection requirements
+4. All general notes, insulation notes, and special requirements
+5. Capture each distinct schedule as a separate section with appropriate field structure
+
+Pay special attention to equipment like pumps (CP), mixing valves (TM), and shock absorbers (SA) which must be captured even if located in separate tables or areas of the drawing.
 """,
         example="""
 {
   "PLUMBING": {
     "metadata": {
-      "drawing_number": "P101",
-      "title": "PLUMBING PLAN",
+      "drawing_number": "P601",
+      "title": "PLUMBING SCHEDULES",
       "date": "2023-05-15",
       "revision": "2"
     },
-    "fixtures": [],
-    "equipment": [],
-    "piping": {
-      "domestic_water": [],
-      "waste": [],
-      "vent": []
+    "FIXTURE": [
+      {
+        "fixture_id": "S1",
+        "description": "SINGLE COMPARTMENT SINK",
+        "manufacturer": "McGuire Supplies",
+        "model": "N/A",
+        "mounting": "Contractor installed",
+        "type": "17 gauge brass P-trap",
+        "connections": {
+          "cold_water": "1/2 inch",
+          "waste": "2 inch",
+          "vent": "2 inch",
+          "hot_water": "1/2 inch"
+        },
+        "notes": "Contractor installed"
+      }
+    ],
+    "WATER_HEATER": [
+      {
+        "mark": "WH-1",
+        "location": "Mechanical Room",
+        "manufacturer": "A.O. Smith",
+        "model": "DRE-120-24",
+        "specifications": {
+          "storage_gallons": "120",
+          "operating_water_temp": "140°F",
+          "recovery_rate": "99 GPH"
+        },
+        "mounting": "Floor mounted",
+        "notes": ["Provide T&P relief valve"]
+      }
+    ],
+    "PUMP": [
+      {
+        "mark": "CP",
+        "location": "Mechanical Room",
+        "serves": "Hot Water Recirculation",
+        "type": "IN-LINE",
+        "gpm": "10",
+        "tdh_ft": "20",
+        "hp": "1/2",
+        "electrical": "120V/1PH/60HZ",
+        "manufacturer": "Bell & Gossett",
+        "model": "Series 100"
+      }
+    ],
+    "MIXING_VALVE": [
+      {
+        "designation": "TM",
+        "location": "Mechanical Room",
+        "manufacturer": "Powers",
+        "model": "LFLM495-1",
+        "notes": "Master thermostatic mixing valve"
+      }
+    ],
+    "SHOCK_ABSORBER": [
+      {
+        "mark": "SA-A",
+        "fixture_units": "1-11",
+        "manufacturer": "Sioux Chief",
+        "model": "660-A"
+      }
+    ],
+    "MATERIAL_LEGEND": {
+      "SANITARY SEWER PIPING": "CAST IRON OR SCHEDULE 40 PVC",
+      "DOMESTIC WATER PIPING": "TYPE L COPPER"
     },
-    "notes": []
+    "GENERAL_NOTES": [
+      "A. All fixtures shall be installed per manufacturer's recommendations."
+    ],
+    "INSULATION_NOTES": [
+      "A. Insulate all domestic hot water piping with 1\" thick fiberglass insulation."
+    ]
   }
 }
 """,
-        context="Plumbing engineers and contractors rely on this information for proper system design, coordination, and installation."
+        context="Plumbing engineers and contractors rely on ALL schedules, notes, and specifications for proper system design, coordination, and installation. Missing information can lead to serious installation issues or code violations."
     )
 
 @register_prompt("Plumbing", "FIXTURE")
@@ -42,40 +115,139 @@ def fixture_schedule_prompt():
     return create_schedule_template(
         schedule_type="fixture",
         drawing_category="plumbing",
-        item_type="plumbing fixture",
-        key_properties="model numbers, connection sizes, and flow rates",
+        item_type="plumbing fixture and equipment",
+        key_properties="identifiers, models, specifications, connections, notes and all related schedules",
         example_structure="""
 {
   "PLUMBING": {
-    "FIXTURE": {
-      "fixture_id": "P-1",
-      "description": "WATER CLOSET",
-      "manufacturer": "American Standard",
-      "model": "2234.001",
-      "mounting": "Floor mounted",
-      "type": "1.28 GPF, elongated bowl",
-      "connections": {
-        "cold_water": "1/2 inch",
-        "waste": "4 inch"
+    "metadata": {
+      "drawing_number": "P601",
+      "title": "PLUMBING SCHEDULES",
+      "date": "2023-05-15",
+      "revision": "2"
+    },
+    "FIXTURE": [
+      {
+        "fixture_id": "S1",
+        "description": "SINGLE COMPARTMENT SINK",
+        "manufacturer": "McGuire Supplies",
+        "model": "N/A",
+        "mounting": "Contractor installed",
+        "type": "17 gauge brass P-trap",
+        "connections": {
+          "cold_water": "1/2 inch",
+          "waste": "2 inch",
+          "vent": "2 inch",
+          "hot_water": "1/2 inch"
+        },
+        "location": "Refer to architect for specification",
+        "notes": "Contractor installed"
       },
-      "accessories": [
-        "Toilet seat: Church 9500NSSC",
-        "Carrier: Josam 12674",
-        "Flush valve: Sloan Royal 111-1.28"
-      ],
-      "ada_compliant": true,
-      "location": "Restrooms 101, 102, 103",
-      "rough_in_height": "15 inches to rim",
-      "notes": "Provide floor flange and wax ring"
-    }
+      {
+        "fixture_id": "SW-01",
+        "description": "WATER CLOSET",
+        "manufacturer": "American Standard",
+        "model": "2234.001",
+        "mounting": "Floor mounted",
+        "type": "1.28 GPF, elongated bowl",
+        "connections": {
+          "cold_water": "1/2 inch",
+          "waste": "4 inch",
+          "vent": "2 inch"
+        },
+        "location": "Various",
+        "notes": "Provide floor flange and wax ring"
+      }
+    ],
+    "WATER_HEATER": [
+      {
+        "mark": "WH-1",
+        "location": "Mechanical Room",
+        "manufacturer": "A.O. Smith",
+        "model": "DRE-120-24",
+        "specifications": {
+          "storage_gallons": "120",
+          "operating_water_temp": "140°F",
+          "tank_dimensions": "26\" DIA x 71\" H",
+          "recovery_rate": "99 GPH at 100°F rise",
+          "electric_power": "480V, 3PH, 60HZ",
+          "kW_input": "24"
+        },
+        "mounting": "Floor mounted",
+        "notes": [
+          "Provide T&P relief valve",
+          "Provide seismic restraints per detail P5.1",
+          "Provide expansion tank"
+        ]
+      }
+    ],
+    "PUMP": [
+      {
+        "mark": "CP",
+        "location": "Mechanical Room",
+        "serves": "Hot Water Recirculation",
+        "type": "IN-LINE",
+        "gpm": "10",
+        "tdh_ft": "20",
+        "hp": "1/2",
+        "rpm": "1750",
+        "electrical": "120V/1PH/60HZ",
+        "manufacturer": "Bell & Gossett",
+        "model": "Series 100",
+        "notes": "Provide spring isolation hangers"
+      }
+    ],
+    "MIXING_VALVE": [
+      {
+        "designation": "TM",
+        "location": "Mechanical Room",
+        "inlet_temp_F": "140",
+        "outlet_temp_F": "120",
+        "pressure_drop_psi": "5",
+        "manufacturer": "Powers",
+        "model": "LFLM495-1",
+        "notes": "Master thermostatic mixing valve for domestic hot water system"
+      }
+    ],
+    "SHOCK_ABSORBER": [
+      {
+        "mark": "SA-A",
+        "fixture_units": "1-11",
+        "manufacturer": "Sioux Chief",
+        "model": "660-A",
+        "description": "Water hammer arrestor, size A"
+      },
+      {
+        "mark": "SA-B",
+        "fixture_units": "12-32",
+        "manufacturer": "Sioux Chief",
+        "model": "660-B",
+        "description": "Water hammer arrestor, size B"
+      }
+    ],
+    "MATERIAL_LEGEND": {
+      "SANITARY SEWER PIPING": "CAST IRON OR SCHEDULE 40 PVC",
+      "VENT PIPING": "CAST IRON OR SCHEDULE 40 PVC",
+      "DOMESTIC WATER PIPING": "TYPE L COPPER",
+      "STORM DRAIN PIPING": "CAST IRON OR SCHEDULE 40 PVC"
+    },
+    "GENERAL_NOTES": [
+      "A. All fixtures and equipment shall be installed per manufacturer's recommendations.",
+      "B. Verify all rough-in dimensions with architectural drawings and manufacturer's cut sheets.",
+      "C. All hot and cold water piping to be insulated per specifications."
+    ],
+    "INSULATION_NOTES": [
+      "A. Insulate all domestic hot water piping with 1\" thick fiberglass insulation.",
+      "B. Insulate all domestic cold water piping with 1/2\" thick fiberglass insulation."
+    ]
   }
 }
 """,
         source_location="schedule",
-        preservation_focus="fixture types, models, and connection requirements",
+        preservation_focus="ALL fixture types, equipment, pumps, valves, shock absorbers, materials, and notes",
         stake_holders="Plumbing engineers and contractors",
-        use_case="fixture selection and installation coordination",
-        critical_purpose="proper fixture function and water conservation"
+        use_case="comprehensive fixture and equipment selection and installation coordination",
+        critical_purpose="proper system function, water conservation, and code compliance"
     )
 
 @register_prompt("Plumbing", "EQUIPMENT")
