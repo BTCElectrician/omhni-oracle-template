@@ -38,69 +38,96 @@ Focus on identifying and extracting ALL electrical elements (panels, fixtures, d
 @register_prompt("Electrical", "PANEL_SCHEDULE")
 def panel_schedule_prompt():
     """Prompt for electrical panel schedules."""
-    return create_schedule_template(
+    base_prompt = create_schedule_template(
         schedule_type="panel schedule",
         drawing_category="electrical",
         item_type="circuit",
-        key_properties="circuit assignments, breaker sizes, and load descriptions",
+        # Instructions integrated into key_properties for clarity
+        key_properties="CRITICAL: First, create a 'DRAWING_METADATA' object containing drawing metadata like drawing_number, title, revision, date, job_number, project_name found in the title block. Second, create a main 'ELECTRICAL' object. Inside 'ELECTRICAL', create a 'PANEL_SCHEDULE' object. Inside 'PANEL_SCHEDULE', create a 'panel' object holding ALL panel metadata found (e.g., name, location, voltage, phases, wires, main_breaker/MLO, rating, aic_rating, mounting, enclosure, fed_from). This 'panel' object MUST also contain a 'circuits' list. For EACH circuit listed in the schedule, create a JSON object in the 'circuits' list containing AT LEAST 'circuit' number, 'trip' size (breaker amps), 'poles', and 'load_name'. Include ANY other details provided per circuit (VA, room, notes, GFCI status, etc.). Extract any general notes related to panels into an 'ELECTRICAL.general_notes' list.",
         example_structure="""
 {
+  "DRAWING_METADATA": {
+    "drawing_number": "E4.01",
+    "title": "PANEL SCHEDULES",
+    "revision": "1",
+    "date": "2024-01-15",
+    "job_number": "P12345",
+    "project_name": "Sample Project"
+  },
   "ELECTRICAL": {
     "PANEL_SCHEDULE": {
       "panel": {
-        "name": "K1S",
+        "name": "K1",
+        "location": "Kitchen 118",
         "voltage": "120/208 Wye",
         "phases": 3,
+        "wires": 4,
         "main_breaker": "30 A Main Breaker",
-        "marks": "K1S",
-        "aic_rating": "65K",
-        "type": "MLO",
-        "rating": "600 A",
-        "specifications": {
-          "sections": "1 Section(s)",
-          "nema_enclosure": "Nema 1 Enclosure",
-          "amps": "125 Amps",
-          "phases": "3 Phase 4 Wire",
-          "voltage": "480Y/277V",
-          "frequency": "50/60 Hz",
-          "interrupt_rating": "65kA Fully Rated",
-          "incoming_feed": "Bottom",
-          "fed_from": "1 inch conduit with 4#10's and 1#10 ground",
-          "mounting": "Surface Mounted",
-          "circuits_count": 12
-        },
+        "rating": "225 A",
+        "aic_rating": "14K",
+        "mounting": "Surface",
+        "enclosure": "NEMA 1",
+        "fed_from": "MDP",
         "circuits": [
           {
-            "circuit": 1,
-            "load_name": "E-117(*)",
-            "trip": "15 A",
+            "circuit": "1",
+            "load_name": "Kitchen Equipment - Refrigerator",
+            "trip": "20 A",
             "poles": 1,
-            "wires": 4,
-            "info": "GFCI Circuit Breaker",
-            "load_classification": "Kitchen Equipment",
-            "connected_load": "1200 VA",
-            "demand_factor": "65.00%",
-            "equipment_ref": "E01",
-            "room_id": ["Room_2104", "Room_2105"]
+            "va_per_pole": 1200,
+            "room_id": ["Kitchen 118"],
+            "notes": "GFCI Breaker"
+          },
+          {
+            "circuit": "3,5",
+            "load_name": "Oven",
+            "trip": "50 A",
+            "poles": 2,
+            "va_per_pole": 4800,
+            "room_id": ["Kitchen 118"]
           }
         ],
         "panel_totals": {
-          "total_connected_load": "5592 VA",
-          "total_estimated_demand": "3635 VA", 
-          "total_connected_amps": "16 A",
-          "total_estimated_demand_amps": "10 A"
+           "total_connected_load_va": 25600,
+           "total_demand_load_va": 21800,
+           "total_connected_amps": 71.1,
+           "total_demand_amps": 60.5
         }
       }
-    }
+    },
+    "general_notes": [
+        "Verify all panel locations with architectural drawings.",
+        "All breakers to be bolt-on type."
+    ]
   }
 }
 """,
-        source_location="panel schedule",
-        preservation_focus="circuit numbers, trip sizes, and load descriptions",
-        stake_holders="Electrical engineers and installers",
-        use_case="critical electrical system design and installation",
-        critical_purpose="preventing safety hazards and ensuring proper function"
+        source_location="panel schedule drawings or tables",
+        preservation_focus="panel metadata, ALL circuit numbers, trip sizes, poles, and load descriptions",
+        stake_holders="Electrical engineers, estimators, and installers",
+        use_case="critical electrical system design, load calculation, and installation",
+        critical_purpose="preventing safety hazards, ensuring code compliance, and proper circuit protection"
     )
+
+    # Append critical formatting requirements
+    formatting_reqs = """
+
+CRITICAL FORMATTING REQUIREMENTS (Strict JSON):
+1. Ensure ALL property names (keys) are enclosed in double quotes (e.g., "name": "K1").
+2. ALL string values must be enclosed in double quotes (e.g., "voltage": "120/208 Wye"). Numeric values should NOT be quoted (e.g., "poles": 1). Boolean values (true/false) should NOT be quoted.
+3. Ensure ALL items in an array (like 'circuits' or 'room_id') are separated by commas.
+4. There must be NO trailing comma after the last item in an array or the last key-value pair in an object.
+5. Objects must start with '{' and end with '}'. Arrays must start with '[' and end with ']'.
+6. Each circuit in the 'circuits' array MUST be a complete JSON object '{...}'.
+
+Example of correct circuit array formatting:
+"circuits": [
+  { "circuit": "1", "load_name": "Equipment", "trip": "20 A", "poles": 1 },
+  { "circuit": "2", "load_name": "Lighting", "trip": "15 A", "poles": 1 }
+]
+(NO comma after the last circuit object '}')
+"""
+    return base_prompt + formatting_reqs
 
 @register_prompt("Electrical", "LIGHTING")
 def lighting_fixture_prompt():

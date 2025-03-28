@@ -1,6 +1,8 @@
 # File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/ai_service.py
 import json
 import logging
+import re
+import os
 from enum import Enum
 from typing import Dict, Any, Optional, TypeVar, Generic, List
 from openai import AsyncOpenAI
@@ -15,6 +17,9 @@ from templates.prompt_types import (
     PlumbingSubtype
 )
 from templates.prompt_templates import get_prompt_template
+
+# Initialize logger at module level
+logger = logging.getLogger(__name__)
 
 # Drawing type-specific instructions with main types and subtypes
 # (DRAWING_INSTRUCTIONS dictionary remains the same - keeping it for brevity)
@@ -647,8 +652,34 @@ def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
 
     # Electrical subtypes
     if drawing_type == DrawingCategory.ELECTRICAL.value:
-        # Panel schedules
-        if any(term in file_name_lower for term in ["panel", "schedule", "panelboard", "circuit", "h1", "l1", "k1", "k1s", "21lp-1", "20h-1"]):
+        # Look for stronger panel schedule indicators using regex
+        panel_indicators_regex = [
+            r"panel", r"schedule", r"panelboard", r"circuit",
+            r"breaker", r"distribution", r"single line", r"riser", r"one line", # Added riser/one-line
+            # Panel naming patterns (simple examples, case-insensitive matching)
+            r"^[a-z][0-9]+[a-z]?$",                  # Matches names like h1, k1s, l1a at start of filename
+            r"[a-z][0-9]+[a-z]?(-| panel| schedule)", # Matches names like h1-panel, k1s schedule anywhere
+            r"^[0-9]{1,2}[a-z]{1,2}(p|h)?-[0-9]+$",   # Matches names like 21lp-1, 20h-1 at start
+            # Add more specific project patterns here if known, e.g. r"^lp-.*"
+        ]
+        # Match against the base name without extension, case-insensitive
+        base_name_lower = os.path.splitext(os.path.basename(file_name))[0].lower()
+        is_panel_schedule = False
+        for pattern in panel_indicators_regex:
+            # Try searching anywhere in the full filename first
+            if re.search(pattern, file_name.lower()):
+                 is_panel_schedule = True
+                 logging.debug(f"Panel indicator '{pattern}' found in filename '{file_name}'")
+                 break
+            # Try matching specific patterns (like ^...$) against the base name
+            # Adjust regex if they shouldn't be start/end anchored (remove ^ and $)
+            if pattern.startswith('^') and re.match(pattern, base_name_lower):
+                 is_panel_schedule = True
+                 logging.debug(f"Panel pattern '{pattern}' matched base name '{base_name_lower}'")
+                 break
+
+        if is_panel_schedule:
+            logging.info(f"Detected PANEL_SCHEDULE subtype for '{file_name}'")
             return f"{drawing_type}_{ElectricalSubtype.PANEL_SCHEDULE.value}"
         # Lighting fixtures and controls
         elif any(term in file_name_lower for term in ["light", "lighting", "fixture", "lamp", "luminaire", "rcp", "ceiling"]):
