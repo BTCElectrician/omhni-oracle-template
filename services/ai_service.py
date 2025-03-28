@@ -23,17 +23,25 @@ DRAWING_INSTRUCTIONS = {
     "Electrical": """
     You are an electrical drawing expert extracting structured information. Focus on:
     
-    1. All panel schedules - capture complete information about:
+    1. CRITICAL: Extract all metadata from the drawing's title block including:
+       - drawing_number: The drawing number identifier 
+       - title: The drawing title/description
+       - revision: Revision number or letter
+       - date: Drawing date
+       - job_number: Project/job number
+       - project_name: Full project name
+    
+    2. All panel schedules - capture complete information about:
        - Panel metadata (name, voltage, phases, rating, location)
        - All circuits with numbers, trip sizes, poles, load descriptions
        - Any panel notes or specifications
     
-    2. All equipment schedules with:
+    3. All equipment schedules with:
        - Complete electrical characteristics (voltage, phase, current ratings)
        - Connection types and mounting specifications
        - Part numbers and manufacturers when available
     
-    3. Installation details:
+    4. Installation details:
        - Circuit assignments and home run information
        - Mounting heights and special requirements
        - Keyed notes relevant to electrical items
@@ -43,6 +51,63 @@ DRAWING_INSTRUCTIONS = {
     
     IMPORTANT: Ensure ALL circuits, equipment items, and notes are captured in your output. Missing information 
     can cause installation errors.
+    """,
+    
+    "Electrical_LIGHTING": """
+    You are an expert in electrical lighting analyzing a lighting drawing or fixture schedule.
+    
+    CRITICAL: Extract all metadata from the drawing's title block, including:
+    - drawing_number (e.g., "E1.00")
+    - title (e.g., "LIGHTING - FLOOR LEVEL")
+    - revision (e.g., "3")
+    - date (e.g., "08/15/2024")
+    - job_number (e.g., "30J7925")
+    - project_name (e.g., "ELECTRIC SHUFFLE")
+    
+    Capture ALL lighting fixtures with these details:
+    - type_mark: The fixture type identifier
+    - count: Quantity of this fixture type
+    - manufacturer: Fixture manufacturer name
+    - product_number: Product/model number
+    - description: Complete fixture description
+    - finish: Material finish
+    - lamp_type: Lamp specification with wattage and color temp
+    - mounting: Mounting method
+    - dimensions: Physical dimensions with units
+    - location: Installation location
+    - wattage: Power consumption
+    - ballast_type: Driver/ballast type
+    - dimmable: Whether fixture is dimmable
+    - remarks: Any special notes
+    - catalog_series: Full catalog reference
+    
+    Also document all lighting zones and controls:
+    - zone: Zone identifier
+    - area: Area served
+    - circuit: Circuit number
+    - fixture_type: Type of fixture
+    - dimming_control: Control type
+    - notes: Special conditions
+    - quantities_or_linear_footage: Installation quantity
+    
+    Structure into a clear, consistent JSON format with metadata at the top level:
+    {
+      "ELECTRICAL": {
+        "metadata": {
+          "drawing_number": "E1.00",
+          "title": "LIGHTING - FLOOR LEVEL",
+          "revision": "3",
+          "date": "08/15/2024", 
+          "job_number": "30J7925",
+          "project_name": "ELECTRIC SHUFFLE"
+        },
+        "LIGHTING_FIXTURE": [...],
+        "LIGHTING_ZONE": [...]
+      }
+    }
+    
+    Lighting design coordination requires COMPLETE accuracy in fixture specifications.
+    Missing or incorrect information can cause ordering errors and installation conflicts.
     """,
     
     "Mechanical": """
