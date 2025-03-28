@@ -171,11 +171,28 @@ async def process_pdf_async(
                 logger.info(f"Saved structured data to: {output_path}")
 
                 # Process architectural drawings for room templates if applicable
-                if drawing_type == 'Architectural' and 'rooms' in parsed_json:
-                    from templates.room_templates import process_architectural_drawing
-                    result = process_architectural_drawing(parsed_json, pdf_path, type_folder)
-                    templates_created['floor_plan'] = True
-                    logger.info(f"Created room templates: {result}")
+                if (drawing_type == 'Architectural' and
+                        isinstance(parsed_json, dict) and # Check if parsed_json is a dictionary
+                        'ARCHITECTURAL' in parsed_json and # Check if 'ARCHITECTURAL' key exists
+                        isinstance(parsed_json.get('ARCHITECTURAL'), dict) and # Check if its value is a dictionary
+                        'ROOMS' in parsed_json['ARCHITECTURAL'] and # Check if 'ROOMS' key exists within 'ARCHITECTURAL'
+                        isinstance(parsed_json['ARCHITECTURAL'].get('ROOMS'), list)): # Check if its value is a list
+
+                    # Log entry added for confirmation
+                    logger.info(f"Found architectural rooms in {file_name}. Calling process_architectural_drawing.")
+                    try:
+                        from templates.room_templates import process_architectural_drawing
+                        # Pass parsed_json (the dictionary) not the string
+                        result = process_architectural_drawing(parsed_json, pdf_path, type_folder)
+                        # Ensure templates_created is defined and accessible in this scope if needed elsewhere
+                        templates_created['floor_plan'] = True 
+                        logger.info(f"Finished process_architectural_drawing for {file_name}. Result: {result}")
+                    except Exception as template_error:
+                        logger.error(f"Error during process_architectural_drawing for {file_name}: {template_error}")
+                else:
+                    # Log if the condition is false for debugging
+                    if drawing_type == 'Architectural':
+                        logger.warning(f"Architectural file {file_name} processed, but 'ARCHITECTURAL.ROOMS' list not found or invalid in the initial JSON. Skipping template generation.")
 
                 pbar.update(10)
                 return {"success": True, "file": output_path}

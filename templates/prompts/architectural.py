@@ -43,44 +43,44 @@ def room_schedule_prompt():
         schedule_type="room",
         drawing_category="architectural",
         item_type="room",
-        key_properties="wall types, finishes, and dimensions",
+        key_properties="""CRITICAL: First, create a 'DRAWING_METADATA' object with drawing number, title, revision, date, job number, project name.
+Next, create an 'ARCHITECTURAL' object containing a 'ROOMS' list.
+For EACH room, extract 'room_number' and 'room_name' EXACTLY. Also extract any associated text like 'dimensions' or 'notes'.
+Extract general notes into 'ARCHITECTURAL.general_notes'.""",
         example_structure="""
 {
+  "DRAWING_METADATA": {
+    "drawing_number": "A2.2",
+    "title": "DIMENSION FLOOR PLAN",
+    "revision": "4",
+    "date": "2024.06.25",
+    "job_number": "GA1323",
+    "project_name": "ELECTRIC SHUFFLE"
+  },
   "ARCHITECTURAL": {
-    "ROOM": {
-      "room_id": "Room_2104",
-      "room_name": "CONFERENCE 2104",
-      "circuits": {
-        "lighting": ["21LP-1"],
-        "power": ["21LP-17"]
+    "ROOMS": [
+      {
+        "room_id": "Room_101",
+        "room_number": "101",
+        "room_name": "ENTRY",
+        "dimensions": "± 10' - 11 7/8\\"",
+        "wall_type": "existing wall to remain", 
+        "notes": ["Note directly found within or pointing to room 101"]
       },
-      "light_fixtures": {
-        "fixture_ids": ["F3", "F4"],
-        "fixture_count": {
-          "F3": 14,
-          "F4": 2
-        }
-      },
-      "outlets": {
-        "regular_outlets": 3,
-        "controlled_outlets": 1
-      },
-      "data": 4,
-      "floor_boxes": 2,
-      "mechanical_equipment": [
-        {
-          "mechanical_id": "fpb-21.03"
-        }
-      ],
-      "switches": {
-        "type": "vacancy sensor",
-        "model": "WSX-PDT",
-        "dimming": "0 to 10V",
-        "quantity": 2,
-        "mounting_type": "wall-mounted",
-        "line_voltage": true
+      {
+        "room_id": "Room_103",
+        "room_number": "103",
+        "room_name": "DINING 103",
+        "dimensions": "± 27' - 7 3/4\\"", 
+        "wall_type": "new wall", 
+        "notes": []
       }
-    }
+      // ... other rooms
+    ],
+    "general_notes": [ 
+        "Contractor to verify all dimensions...",
+        "Glazing, casework, millwork suppliers shall field verify..."
+    ]
   }
 }
 """,
