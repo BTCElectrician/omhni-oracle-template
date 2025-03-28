@@ -44,7 +44,8 @@ CRITICAL INSTRUCTIONS:
 3. INCLUDE all technical specifications and requirements 
 4. ADAPT the structure to match this specific drawing
 5. MAINTAIN the overall hierarchical organization shown in the example
-6. Format your output as a complete, valid JSON object.
+6. EXTRACT ALL metadata from the drawing's title block, including drawing_number, title, revision, date, job_number, and project_name
+7. Format your output as a complete, valid JSON object.
 
 {stake_holders} rely on this information for {use_case}.
 Complete accuracy is essential for {critical_purpose}.

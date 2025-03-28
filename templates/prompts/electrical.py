@@ -109,10 +109,18 @@ def lighting_fixture_prompt():
         schedule_type="lighting fixture",
         drawing_category="electrical",
         item_type="lighting fixture",
-        key_properties="model numbers, descriptions, and performance data",
+        key_properties="CRITICAL: Extract all metadata from the drawing's title block, including drawing_number, title, revision, date, job_number, and project_name, placing it in the 'metadata' object. Also capture model numbers, descriptions, and performance data for fixtures.",
         example_structure="""
 {
   "ELECTRICAL": {
+    "metadata": {
+      "drawing_number": "E1.00",
+      "title": "LIGHTING - FLOOR LEVEL",
+      "revision": "3",
+      "date": "08/15/2024",
+      "job_number": "30J7925",
+      "project_name": "ELECTRIC SHUFFLE"
+    },
     "LIGHTING_FIXTURE": {
       "type_mark": "CL-US-18",
       "count": 13,

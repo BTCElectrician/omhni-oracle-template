@@ -1,0 +1,38 @@
+{
+  "ELECTRICAL": {
+    "metadata": {
+      "drawing_number": "E1.00",
+      "title": "LIGHTING - FLOOR LEVEL",
+      "revision": "3",
+      "date": "08/15/2024",
+      "job_number": "30J7925",
+      "project_name": "ELECTRIC SHUFFLE"
+    },
+    "LIGHTING_FIXTURE": {
+      "type_mark": "CL-US-18",
+      "count": 13,
+      "manufacturer": "Mullan",
+      "product_number": "MLP323",
+      "description": "Essense Vintage Prismatic Glass Pendant Light",
+      "finish": "Antique Brass",
+      "lamp_type": "E27, 40W, 120V, 2200K",
+      "mounting": "Ceiling",
+      "dimensions": "15.75\" DIA x 13.78\" HEIGHT",
+      "location": "Restroom Corridor and Raised Playspace",
+      "wattage": "40W",
+      "ballast_type": "LED Driver",
+      "dimmable": "Yes",
+      "remarks": "Refer to architectural",
+      "catalog_series": "RA1-24-A-35-F2-M-C"
+    },
+    "LIGHTING_ZONE": {
+      "zone": "Z1",
+      "area": "Dining 103",
+      "circuit": "L1-13",
+      "fixture_type": "LED",
+      "dimming_control": "ELV",
+      "notes": "Shuffleboard Tables 3,4",
+      "quantities_or_linear_footage": "16"
+    }
+  }
+}

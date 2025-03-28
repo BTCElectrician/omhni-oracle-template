@@ -33,7 +33,6 @@
 │   ├── constants.py
 │   ├── file_utils.py
 │   ├── logging_utils.py
-│   ├── pdf_processor.py
 │   └── performance_utils.py
 ├── .env.example
 ├── main.py
@@ -106,25 +105,6 @@ pytest-cov~=4.1.0  # For test coverage
 
 ```
 
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/.env.example
-```example
-# OpenAI API Configuration
-OPENAI_API_KEY=your_openai_key_here
-
-# Azure Document Intelligence Configuration
-DOCUMENTINTELLIGENCE_ENDPOINT=<yourEndpoint>
-DOCUMENTINTELLIGENCE_API_KEY=<yourKey>
-
-# Optional Configuration
-# LOG_LEVEL=INFO
-# BATCH_SIZE=10
-# API_RATE_LIMIT=60
-# TIME_WINDOW=60 
-
-# Model Selection (set to "true" to force mini model for all documents)
-FORCE_MINI_MODEL=false 
-```
-
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/main.py
 ```py
 import os
@@ -195,62 +175,23 @@ if __name__ == "__main__":
         sys.exit(1) 
 ```
 
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/config/settings.py
-```py
-"""
-Application settings loaded from environment variables.
-"""
-import os
-from dotenv import load_dotenv
-from typing import Dict, Any
-
-# Load environment variables from .env file
-load_dotenv()
-
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/.env.example
+```example
 # OpenAI API Configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY must be set in environment variables")
+OPENAI_API_KEY=your_openai_key_here
 
-# Logging Configuration
-LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+# Azure Document Intelligence Configuration
+DOCUMENTINTELLIGENCE_ENDPOINT=<yourEndpoint>
+DOCUMENTINTELLIGENCE_API_KEY=<yourKey>
 
-# Processing Configuration
-BATCH_SIZE = int(os.getenv('BATCH_SIZE', '10'))
-API_RATE_LIMIT = int(os.getenv('API_RATE_LIMIT', '60'))
-TIME_WINDOW = int(os.getenv('TIME_WINDOW', '60'))
+# Optional Configuration
+# LOG_LEVEL=INFO
+# BATCH_SIZE=10
+# API_RATE_LIMIT=60
+# TIME_WINDOW=60 
 
-# Processing Mode Configuration
-USE_SIMPLIFIED_PROCESSING = os.getenv('USE_SIMPLIFIED_PROCESSING', 'false').lower() == 'true'
-
-# Model Selection Configuration - Define as a function to reload each time
-def get_force_mini_model():
-    """Always reload from env to get the latest value"""
-    load_dotenv(override=True)
-    return os.getenv('FORCE_MINI_MODEL', 'false').lower() == 'true'
-
-# Standard definition for backward compatibility
-FORCE_MINI_MODEL = get_force_mini_model()
-
-# Template Configuration
-TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
-
-# Additional configuration settings
-DEBUG_MODE = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
-
-def get_all_settings() -> Dict[str, Any]:
-    return {
-        "OPENAI_API_KEY": "***REDACTED***" if OPENAI_API_KEY else None,
-        "LOG_LEVEL": LOG_LEVEL,
-        "BATCH_SIZE": BATCH_SIZE,
-        "API_RATE_LIMIT": API_RATE_LIMIT,
-        "TIME_WINDOW": TIME_WINDOW,
-        "TEMPLATE_DIR": TEMPLATE_DIR,
-        "DEBUG_MODE": DEBUG_MODE,
-        "USE_SIMPLIFIED_PROCESSING": USE_SIMPLIFIED_PROCESSING,
-        "FORCE_MINI_MODEL": get_force_mini_model()  # Always get latest value
-    }
-
+# Model Selection (set to "true" to force mini model for all documents)
+FORCE_MINI_MODEL=false 
 ```
 
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/constants.py
@@ -303,6 +244,12 @@ def get_drawing_subtype(filename: str) -> str:
         return "architectural_schedule"
     else:
         return "default"
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/__init__.py
+```py
+# Processing package initialization
+
 ```
 
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/performance_utils.py
@@ -550,159 +497,6 @@ def get_tracker() -> PerformanceTracker:
         Global PerformanceTracker instance
     """
     return tracker 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/__init__.py
-```py
-# Processing package initialization
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/pdf_processor.py
-```py
-"""
-PDF processing utilities that leverage the extraction service.
-"""
-import os
-import json
-import logging
-from typing import Dict, Any, Tuple, Optional
-
-from services.extraction_service import PyMuPdfExtractor, ExtractionResult
-from services.ai_service import DrawingAiService, AiResponse, ModelType
-
-
-async def extract_text_and_tables_from_pdf(pdf_path: str) -> str:
-    """
-    Extract text and tables from a PDF file.
-    This is a legacy wrapper around the new extraction service.
-    
-    Args:
-        pdf_path: Path to the PDF file
-        
-    Returns:
-        Extracted content as a string
-    """
-    extractor = PyMuPdfExtractor()
-    result = await extractor.extract(pdf_path)
-    
-    all_content = ""
-    if result.success:
-        all_content += "TEXT:\n" + result.raw_text + "\n"
-        
-        for table in result.tables:
-            all_content += "TABLE:\n"
-            all_content += table["content"] + "\n"
-    
-    return all_content
-
-
-async def structure_panel_data(client, raw_content: str) -> Dict[str, Any]:
-    """
-    Structure panel data using the AI service.
-    
-    Args:
-        client: OpenAI client
-        raw_content: Raw content from the panel PDF
-        
-    Returns:
-        Structured panel data as a dictionary
-    """
-    from utils.drawing_processor import DRAWING_INSTRUCTIONS
-    
-    ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
-    
-    system_message = """
-    You are an expert in electrical engineering and panel schedules. 
-    Please structure the following content from an electrical panel schedule into a valid JSON format. 
-    The content includes both text and tables. Extract key information such as panel name, voltage, amperage, circuits, 
-    and any other relevant details.
-    Pay special attention to the tabular data, which represents circuit information.
-    Ensure your entire response is a valid JSON object.
-    """
-    
-    response = await ai_service.process_drawing(
-        raw_content=raw_content,
-        drawing_type="Electrical",
-        temperature=0.2,
-        max_tokens=2000,
-        model_type=ModelType.GPT_4O_MINI
-    )
-    
-    if response.success and response.parsed_content:
-        return response.parsed_content
-    else:
-        logging.error(f"Failed to structure panel data: {response.error}")
-        raise Exception(f"Failed to structure panel data: {response.error}")
-
-
-async def process_pdf(pdf_path: str, output_folder: str, client) -> Tuple[str, Dict[str, Any]]:
-    """
-    Process a PDF file and save the structured data.
-    
-    Args:
-        pdf_path: Path to the PDF file
-        output_folder: Folder to save the output
-        client: OpenAI client
-        
-    Returns:
-        Tuple of (raw_content, structured_data)
-    """
-    from services.storage_service import FileSystemStorage
-    
-    print(f"Processing PDF: {pdf_path}")
-    extractor = PyMuPdfExtractor()
-    storage = FileSystemStorage()
-    
-    # Extract content
-    extraction_result = await extractor.extract(pdf_path)
-    if not extraction_result.success:
-        raise Exception(f"Failed to extract content: {extraction_result.error}")
-    
-    # Convert to the format expected by structure_panel_data
-    raw_content = ""
-    raw_content += "TEXT:\n" + extraction_result.raw_text + "\n"
-    for table in extraction_result.tables:
-        raw_content += "TABLE:\n"
-        raw_content += table["content"] + "\n"
-    
-    # Structure data
-    structured_data = await structure_panel_data(client, raw_content)
-    
-    # Save the result
-    panel_name = structured_data.get('panel_name', 'unknown_panel').replace(" ", "_").lower()
-    filename = f"{panel_name}_electric_panel.json"
-    filepath = os.path.join(output_folder, filename)
-    
-    await storage.save_json(structured_data, filepath)
-    
-    print(f"Saved structured panel data: {filepath}")
-    return raw_content, structured_data
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/file_utils.py
-```py
-import os
-import logging
-from typing import List
-
-logger = logging.getLogger(__name__)
-
-def traverse_job_folder(job_folder: str) -> List[str]:
-    """
-    Traverse the job folder and collect all PDF files.
-    """
-    pdf_files = []
-    try:
-        for root, _, files in os.walk(job_folder):
-            for file in files:
-                if file.lower().endswith('.pdf'):
-                    pdf_files.append(os.path.join(root, file))
-        logger.info(f"Found {len(pdf_files)} PDF files in {job_folder}")
-    except Exception as e:
-        logger.error(f"Error traversing job folder {job_folder}: {str(e)}")
-    return pdf_files
 ```
 
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/logging_utils.py
@@ -1045,1742 +839,92 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
 
 ```
 
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/panel_schedule_processor.py
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/config/settings.py
 ```py
+"""
+Application settings loaded from environment variables.
+"""
 import os
-import json
-import logging
-from typing import Dict, Any, List
-from tqdm.asyncio import tqdm
-
-from services.extraction_service import PyMuPdfExtractor
-from services.storage_service import FileSystemStorage
-from services.ai_service import DrawingAiService, AiRequest, ModelType
-
-# If you have a performance decorator, you can add it here if desired
-# from utils.performance_utils import time_operation
-
-def split_text_into_chunks(text: str, chunk_size: int = None) -> List[str]:
-    """
-    Returns the full text as a single chunk with no splitting.
-    
-    Args:
-        text: The text to process
-        chunk_size: Ignored parameter (kept for backwards compatibility)
-        
-    Returns:
-        List with a single item containing the full text
-    """
-    return [text]
-
-def normalize_panel_data_fields(panel_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Enhanced normalization with expanded synonym mappings:
-    - 'description', 'loadType', 'load type', 'item', 'equipment' => 'load_name'
-    - 'ocp', 'amperage', 'breaker_size', 'amps', 'size' => 'trip'
-    - 'circuit_no', 'circuit_number', 'ckt', 'circuit no', 'no' => 'circuit'
-    - And other common electrical synonyms
-    """
-    circuits = panel_data.get("circuits", [])
-    new_circuits = []
-
-    for cdict in circuits:
-        c = dict(cdict)
-        # load_name synonyms
-        if "description" in c and "load_name" not in c:
-            c["load_name"] = c.pop("description")
-        if "loadType" in c and "load_name" not in c:
-            c["load_name"] = c.pop("loadType")
-        if "load type" in c and "load_name" not in c:
-            c["load_name"] = c.pop("load type")
-        if "item" in c and "load_name" not in c:
-            c["load_name"] = c.pop("item")
-        if "equipment" in c and "load_name" not in c:
-            c["load_name"] = c.pop("equipment")
-
-        # trip synonyms
-        if "ocp" in c and "trip" not in c:
-            c["trip"] = c.pop("ocp")
-        if "breaker_size" in c and "trip" not in c:
-            c["trip"] = c.pop("breaker_size")
-        if "amperage" in c and "trip" not in c:
-            c["trip"] = c.pop("amperage")
-        if "amp" in c and "trip" not in c:
-            c["trip"] = c.pop("amp")
-        if "amps" in c and "trip" not in c:
-            c["trip"] = c.pop("amps")
-        if "size" in c and "trip" not in c:
-            c["trip"] = c.pop("size")
-
-        # circuit synonyms
-        if "circuit_no" in c and "circuit" not in c:
-            c["circuit"] = c.pop("circuit_no")
-        if "circuit_number" in c and "circuit" not in c:
-            c["circuit"] = c.pop("circuit_number")
-        if "ckt" in c and "circuit" not in c:
-            c["circuit"] = c.pop("ckt")
-        if "circuit no" in c and "circuit" not in c:
-            c["circuit"] = c.pop("circuit no")
-        if "no" in c and "circuit" not in c:
-            c["circuit"] = c.pop("no")
-
-        new_circuits.append(c)
-
-    panel_data["circuits"] = new_circuits
-    return panel_data
-
-async def process_panel_schedule_pdf_async(
-    pdf_path: str,
-    client,
-    output_folder: str,
-    drawing_type: str
-) -> Dict[str, Any]:
-    """
-    Specialized function for panel schedules:
-    1) Extract with PyMuPDF
-    2) If any tables found, parse them chunk-by-chunk
-    3) If no tables, fallback to raw text chunking
-    4) Merge partial results & synonyms
-    5) Save final JSON to output_folder/drawing_type
-    """
-    logger = logging.getLogger(__name__)
-    file_name = os.path.basename(pdf_path)
-
-    extractor = PyMuPdfExtractor(logger=logger)
-    storage = FileSystemStorage(logger=logger)
-
-    with tqdm(total=100, desc=f"[PanelSchedules] {file_name}", leave=False) as pbar:
-        try:
-            extraction_result = await extractor.extract(pdf_path)
-            pbar.update(10)
-            if not extraction_result.success:
-                err = f"Extraction failed: {extraction_result.error}"
-                logger.error(err)
-                return {"success": False, "error": err, "file": pdf_path}
-
-            tables = extraction_result.tables
-            raw_text = extraction_result.raw_text
-
-            if tables:
-                logger.info(f"Found {len(tables)} table(s) in {file_name}. Using table-based parsing.")
-                panels_data = await _parse_tables_without_chunking(tables, client, logger)
-            else:
-                logger.warning(f"No tables found in {file_name}—fallback to raw text approach.")
-                panels_data = await _fallback_raw_text(raw_text, client, logger)
-
-            pbar.update(60)
-            if not panels_data:
-                logger.warning(f"No panel data extracted from {file_name}.")
-                return {"success": True, "file": pdf_path, "panel_schedule": True, "data": []}
-
-            # Now we place the final JSON in output_folder/drawing_type
-            type_folder = os.path.join(output_folder, drawing_type)
-            os.makedirs(type_folder, exist_ok=True)
-
-            base_name = os.path.splitext(file_name)[0]
-            output_filename = f"{base_name}_panel_schedules.json"
-            output_path = os.path.join(type_folder, output_filename)
-
-            await storage.save_json(panels_data, output_path)
-            pbar.update(30)
-
-            logger.info(f"Saved panel schedules to {output_path}")
-            pbar.update(10)
-
-            return {
-                "success": True,
-                "file": output_path,
-                "panel_schedule": True,
-                "data": panels_data
-            }
-
-        except Exception as ex:
-            pbar.update(100)
-            logger.error(f"Unhandled error processing panel schedule {pdf_path}: {str(ex)}")
-            return {"success": False, "error": str(ex), "file": pdf_path}
-
-async def _parse_tables_without_chunking(tables: List[Dict[str, Any]], client, logger: logging.Logger) -> List[Dict[str, Any]]:
-    """
-    Process all tables as a single unit - no chunking.
-    Returns a list of panel objects.
-    """
-    from services.ai_service import AiRequest, DrawingAiService
-    
-    ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
-    all_panels = []
-
-    # Combine all tables into a single content block
-    combined_tables = "\n\n".join([tbl_info["content"] for tbl_info in tables if tbl_info["content"].strip()])
-    
-    if not combined_tables.strip():
-        logger.debug("No valid table content found.")
-        return []
-    
-    system_prompt = """
-You are an advanced electrical-engineering assistant. I'm giving you tables from a panel schedule in Markdown form.
-Analyze all tables as a complete set to identify:
-1. Panel metadata (name, voltage, phases, location, etc.)
-2. Complete circuit information
-3. Any notes or additional specifications
-
-Return valid JSON with:
-{
-  "panel_name": "...",
-  "panel_metadata": { ... all available metadata ... },
-  "circuits": [
-    { "circuit": "...", "load_name": "...", "trip": "...", "poles": "...", ... }
-  ]
-}
-Ensure ALL circuits are documented EXACTLY as shown. Missing or incomplete information can cause dangerous installation errors.
-    """.strip()
-
-    # Process the entire set of tables as a single unit
-    user_text = f"FULL PANEL SCHEDULE TABLES:\n{combined_tables}"
-
-    request = AiRequest(
-        content=user_text,
-        model_type=None,  # Let the service determine the appropriate model
-        temperature=0.05,  # Use lowest temperature for precision
-        max_tokens=4000,
-        system_message=system_prompt
-    )
-
-    response = await ai_service.process(request)
-    if not response.success or not response.content:
-        logger.warning(f"GPT parse error on combined tables: {response.error}")
-        return []
-
-    try:
-        panel_json = json.loads(response.content)
-        # Normalize synonyms
-        panel_json = normalize_panel_data_fields(panel_json)
-        # If we found circuits or a panel name, add it
-        if panel_json.get("panel_name") or panel_json.get("circuits"):
-            all_panels.append(panel_json)
-        
-        return all_panels
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error on combined tables: {str(e)}")
-        return []
-
-async def _fallback_raw_text(raw_text: str, client, logger: logging.Logger) -> List[Dict[str, Any]]:
-    """
-    If no tables found, process the entire raw_text as a single unit.
-    Return a list of one or more panels if discovered.
-    """
-    from services.ai_service import AiRequest, DrawingAiService
-
-    ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
-
-    fallback_prompt = """
-You are an expert electrical engineer analyzing panel schedules. The content below represents a panel schedule 
-with potentially unclear formatting. Your goal is to produce a precisely structured JSON representation.
-
-Extract and structure:
-1. Panel metadata (name, voltage, phases, location, etc.) in a 'panel_metadata' object
-2. ALL circuit information in a 'circuits' array with EACH circuit having:
-   - 'circuit': Circuit number EXACTLY as shown
-   - 'trip': Breaker/trip size with units
-   - 'poles': Number of poles (1, 2, or 3)
-   - 'load_name': Complete description of connected load
-   - Any additional circuit information present
-
-Return a valid JSON object with:
-{
-  "panel_name": "Panel ID exactly as shown",
-  "panel_metadata": { ... all available metadata ... },
-  "circuits": [
-    { "circuit": "1", "load_name": "Receptacles Room 101", "trip": "20A", ... },
-    ...
-  ]
-}
-
-CRITICAL: Missing circuits or incorrect information can lead to dangerous installation errors.
-    """.strip()
-
-    # Process the entire content as a single unit
-    user_text = f"PANEL SCHEDULE RAW TEXT:\n{raw_text}"
-
-    request = AiRequest(
-        content=user_text,
-        model_type=None,  # Let the service determine the appropriate model
-        temperature=0.05,  # Use lowest temperature for precision
-        max_tokens=4000,
-        system_message=fallback_prompt
-    )
-
-    response = await ai_service.process(request)
-    if not response.success or not response.content:
-        logger.warning(f"GPT parse error in fallback processing: {response.error}")
-        return []
-
-    try:
-        fallback_data = json.loads(response.content)
-        # Normalize synonyms
-        fallback_data = normalize_panel_data_fields(fallback_data)
-
-        # If no circuits or panel name found, return empty list
-        if not fallback_data.get("panel_name") and not fallback_data.get("circuits"):
-            return []
-
-        return [fallback_data]
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error in fallback processing: {str(e)}")
-        return []
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/file_processor.py
-```py
-import os
-import json
-import logging
-from tqdm.asyncio import tqdm
 from dotenv import load_dotenv
 from typing import Dict, Any
 
-from services.extraction_service import create_extractor
-from services.ai_service import DrawingAiService, process_drawing, optimize_model_parameters, DRAWING_INSTRUCTIONS
-from services.storage_service import FileSystemStorage
-from utils.performance_utils import time_operation
-from utils.constants import get_drawing_type
-from config.settings import USE_SIMPLIFIED_PROCESSING
-
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
-async def process_specification_document(raw_content: str, file_name: str, client) -> Dict[str, Any]:
-    """
-    Specialized function to process specification documents efficiently.
-    
-    Args:
-        raw_content: Raw content from the specification document
-        file_name: Name of the file
-        client: OpenAI client
-        
-    Returns:
-        Structured specifications data
-    """
-    logger = logging.getLogger(__name__)
-    logger.info(f"Processing specification document: {file_name} ({len(raw_content)} chars)")
-    
-    try:
-        # Get optimized parameters
-        params = optimize_model_parameters("Specifications", raw_content, file_name)
-        
-        # Process with the specific system prompt for specifications
-        system_message = f"""
-        You are processing a SPECIFICATION document. Your only task is to extract the content into a structured JSON format.
-        
-        {DRAWING_INSTRUCTIONS.get('Specifications')}
-        
-        Return ONLY valid JSON. Do not include explanations, summaries, or any other text outside the JSON structure.
-        """
-        
-        # Process all content at once - no chunking
-        structured_json = await process_drawing(
-            raw_content=raw_content,
-            drawing_type="Specifications",
-            client=client,
-            file_name=file_name
-        )
-        
-        return json.loads(structured_json)
-        
-    except Exception as e:
-        logger.error(f"Error processing specification document {file_name}: {str(e)}")
-        raise
+# OpenAI API Configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY must be set in environment variables")
 
-@time_operation("total_processing")
-async def process_pdf_async(
-    pdf_path: str,
-    client,
-    output_folder: str,
-    drawing_type: str,
-    templates_created: Dict[str, bool]
-) -> Dict[str, Any]:
-    """
-    Process a single PDF asynchronously:
-    1) Extract text and tables from PDF
-    2) Process with AI using universal prompt
-    3) Save structured JSON output
-    """
-    file_name = os.path.basename(pdf_path)
-    logger = logging.getLogger(__name__)
+# Logging Configuration
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
-    with tqdm(total=100, desc=f"Processing {file_name}", leave=False) as pbar:
-        try:
-            pbar.update(10)
-            extractor = create_extractor(drawing_type, logger)
-            storage = FileSystemStorage(logger)
-            ai_service = DrawingAiService(client, logger)
+# Processing Configuration
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', '10'))
+API_RATE_LIMIT = int(os.getenv('API_RATE_LIMIT', '60'))
+TIME_WINDOW = int(os.getenv('TIME_WINDOW', '60'))
 
-            extraction_result = await extractor.extract(pdf_path)
-            if not extraction_result.success:
-                pbar.update(100)
-                logger.error(f"Extraction failed for {pdf_path}: {extraction_result.error}")
-                return {"success": False, "error": extraction_result.error, "file": pdf_path}
+# Processing Mode Configuration
+USE_SIMPLIFIED_PROCESSING = os.getenv('USE_SIMPLIFIED_PROCESSING', 'false').lower() == 'true'
 
-            # Concatenate all extracted content without any truncation
-            raw_content = extraction_result.raw_text
-            for table in extraction_result.tables:
-                raw_content += f"\nTABLE:\n{table['content']}\n"
-                
-            # Check if this is a specification document
-            is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
-            if is_specification:
-                logger.info(f"Using optimized specification processing for {file_name}")
-                parsed_json = await process_specification_document(raw_content, file_name, client)
-                pbar.update(40)
-            else:
-                # Standard processing for non-specification documents
-                structured_json = await process_drawing(raw_content, drawing_type, client, file_name)
-                pbar.update(40)
-                
-                try:
-                    parsed_json = json.loads(structured_json)
-                except json.JSONDecodeError as e:
-                    pbar.update(100)
-                    logger.error(f"JSON error for {pdf_path}: {str(e)}")
-                    logger.error(f"Raw API response: {structured_json[:500]}...")  # Log the first 500 chars
-                    type_folder = os.path.join(output_folder, drawing_type)
-                    os.makedirs(type_folder, exist_ok=True)
-                    raw_output_path = os.path.join(type_folder, f"{os.path.splitext(file_name)[0]}_raw_response.json")
-                    await storage.save_text(structured_json, raw_output_path)
-                    return {"success": False, "error": f"JSON parse failed: {str(e)}", "file": pdf_path}
+# Model Selection Configuration - Define as a function to reload each time
+def get_force_mini_model():
+    """Always reload from env to get the latest value"""
+    load_dotenv(override=True)
+    return os.getenv('FORCE_MINI_MODEL', 'false').lower() == 'true'
 
-            type_folder = os.path.join(output_folder, drawing_type)
-            os.makedirs(type_folder, exist_ok=True)
-            output_path = os.path.join(type_folder, f"{os.path.splitext(file_name)[0]}_structured.json")
-            await storage.save_json(parsed_json, output_path)
-            pbar.update(20)
-            logger.info(f"Saved: {output_path}")
+# Standard definition for backward compatibility
+FORCE_MINI_MODEL = get_force_mini_model()
 
-            if drawing_type == 'Architectural' and 'rooms' in parsed_json:
-                from templates.room_templates import process_architectural_drawing
-                result = process_architectural_drawing(parsed_json, pdf_path, type_folder)
-                templates_created['floor_plan'] = True
-                logger.info(f"Created templates: {result}")
+# Template Configuration
+TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
 
-            pbar.update(10)
-            return {"success": True, "file": output_path}
-        except Exception as e:
-            pbar.update(100)
-            logger.error(f"Error processing {pdf_path}: {str(e)}")
-            return {"success": False, "error": str(e), "file": pdf_path}
+# Additional configuration settings
+DEBUG_MODE = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
+
+def get_all_settings() -> Dict[str, Any]:
+    return {
+        "OPENAI_API_KEY": "***REDACTED***" if OPENAI_API_KEY else None,
+        "LOG_LEVEL": LOG_LEVEL,
+        "BATCH_SIZE": BATCH_SIZE,
+        "API_RATE_LIMIT": API_RATE_LIMIT,
+        "TIME_WINDOW": TIME_WINDOW,
+        "TEMPLATE_DIR": TEMPLATE_DIR,
+        "DEBUG_MODE": DEBUG_MODE,
+        "USE_SIMPLIFIED_PROCESSING": USE_SIMPLIFIED_PROCESSING,
+        "FORCE_MINI_MODEL": get_force_mini_model()  # Always get latest value
+    }
+
 ```
 
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/ai_service.py
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/__init__.py
 ```py
-import json
+# Processing package initialization
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/utils/file_utils.py
+```py
+import os
 import logging
-from enum import Enum
-from typing import Dict, Any, Optional, TypeVar, Generic, List
-from openai import AsyncOpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from utils.performance_utils import time_operation
-from dotenv import load_dotenv
-from templates.prompt_types import (
-    DrawingCategory, 
-    ArchitecturalSubtype, 
-    ElectricalSubtype,
-    MechanicalSubtype,
-    PlumbingSubtype
-)
-from templates.prompt_templates import get_prompt_template
+from typing import List
 
-# Drawing type-specific instructions with main types and subtypes
-DRAWING_INSTRUCTIONS = {
-    # Main drawing types
-    "Electrical": """
-    You are an electrical drawing expert extracting structured information. Focus on:
-    
-    1. All panel schedules - capture complete information about:
-       - Panel metadata (name, voltage, phases, rating, location)
-       - All circuits with numbers, trip sizes, poles, load descriptions
-       - Any panel notes or specifications
-    
-    2. All equipment schedules with:
-       - Complete electrical characteristics (voltage, phase, current ratings)
-       - Connection types and mounting specifications
-       - Part numbers and manufacturers when available
-    
-    3. Installation details:
-       - Circuit assignments and home run information
-       - Mounting heights and special requirements
-       - Keyed notes relevant to electrical items
-       
-    Structure all schedule information into consistent field names (e.g., use 'load_name' for descriptions, 
-    'circuit' for circuit numbers, 'trip' for breaker sizes).
-    
-    IMPORTANT: Ensure ALL circuits, equipment items, and notes are captured in your output. Missing information 
-    can cause installation errors.
-    """,
-    
-    "Mechanical": """
-    Extract ALL mechanical information with a simplified, comprehensive structure.
+logger = logging.getLogger(__name__)
 
-1. Create a straightforward JSON structure with these main categories:
-   - "equipment": Object containing arrays of ALL mechanical equipment grouped by type
-   - "systems": Information about ductwork, piping, and distribution systems
-   - "notes": ALL notes, specifications, and requirements
-   - "remarks": ALL remarks and numbered references
-
-2. For ANY type of equipment (air handlers, fans, VAVs, pumps, etc.):
-   - Group by equipment type using descriptive keys (airHandlers, exhaustFans, chillers, etc.)
-   - Include EVERY specification field with its EXACT value - never round or approximate
-   - Use camelCase field names based on original headers
-   - Always include identification (tag/ID), manufacturer, model, and capacity information
-   - Capture ALL performance data (CFM, tonnage, BTU, static pressure, etc.)
-   - Include ALL electrical characteristics (voltage, phase, FLA, MCA, etc.)
-
-3. For ALL mechanical information:
-   - Preserve EXACT values - never round or approximate
-   - Include units of measurement
-   - Keep the structure flat and simple
-   - Don't skip ANY information shown on the drawing
-
-Example simplified structure:
-{
-  "equipment": {
-    "airHandlingUnits": [
-      {
-        "id": "AHU-1",
-        "manufacturer": "Trane",
-        "model": "M-Series",
-        "cfm": "10,000",
-        // ALL other fields exactly as shown
-      }
-    ],
-    "exhaustFans": [
-      // ALL fan data with EVERY field
-    ]
-  },
-  "notes": [
-    // ALL notes and specifications
-  ],
-  "remarks": [
-    // ALL remarks and references
-  ]
-}
-
-CRITICAL: Engineers need EVERY mechanical element and specification value EXACTLY as shown - complete accuracy is essential for proper system design, ordering, and installation.
-    """,
-    
-    "Plumbing": """
-    You are extracting detailed plumbing information. Capture:
-    
-    1. Complete fixture schedules with:
-       - Manufacturer, model, and connection types
-       - Flow rates and pressure requirements
-       - Mounting details and rough-in dimensions
-    
-    2. Equipment specifications:
-       - Water heaters (capacity, recovery rate, electrical)
-       - Pumps (GPM, head pressure, electrical requirements)
-       - Special systems (medical gas, vacuum, grease interceptors)
-    
-    3. System details:
-       - Pipe sizing and materials
-       - Flow requirements and fixture counts
-       - Installation notes and special requirements
-       
-    IMPORTANT: Capture ALL plumbing elements with their complete specifications. 
-    Missing or incomplete information can lead to system failures.
-    """,
-    
-    "Architectural": """
-    Extract and structure the following information with PRECISE detail:
-    
-    1. Room information:
-       Create a comprehensive 'rooms' array with objects for EACH room, including:
-       - 'number': Room number as string (EXACTLY as shown)
-       - 'name': Complete room name
-       - 'finish': All ceiling finishes
-       - 'height': Ceiling height (with units)
-       - 'electrical_info': Any electrical specifications
-       - 'architectural_info': Additional architectural details
-       - 'wall_types': Wall construction for each wall (north/south/east/west)
-    
-    2. Complete door and window schedules:
-       - Door/window numbers, types, sizes, and materials
-       - Hardware specifications and fire ratings
-       - Frame types and special requirements
-    
-    3. Wall type details:
-       - Create a 'wall_types' array with complete construction details
-       - Include ALL layers, thicknesses, and special requirements
-       - Document fire and sound ratings
-    
-    4. Architectural notes:
-       - Capture ALL general notes and keyed notes
-       - Include ALL finish schedule information
-       
-    CRITICAL: EVERY room must be captured. Missing rooms can cause major coordination issues.
-    For rooms with minimal information, include what's available and note any missing details.
-    """,
-    
-    "Specifications": """
-Extract specification content using a clean, direct structure.
-
-1. Create a straightforward 'specifications' array containing objects with:
-   - 'section_title': EXACT section number and title (e.g., "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS")
-   - 'content': COMPLETE text of the section with ALL parts and subsections
-   
-2. For the 'content' field:
-   - Preserve the EXACT text - no summarizing or paraphrasing
-   - Maintain ALL hierarchical structure (PART > SECTION > SUBSECTION)
-   - Keep ALL numbering and lettering (1.1, A., etc.)
-   - Include ALL paragraphs, tables, lists, and requirements
-
-3. DO NOT add interpretations, summaries, or analysis
-   - Your ONLY task is to preserve the original text in the correct sections
-   - The structure should be simple and flat (just title + content for each section)
-   - Handle each section as a complete unit
-
-Example structure:
-{
-  "specifications": [
-    {
-      "section_title": "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS",
-      "content": "PART 1 - GENERAL\\n\\n1.1 RELATED DOCUMENTS\\n\\nA. DRAWINGS AND GENERAL PROVISIONS...\\n\\n[COMPLETE TEXT HERE]"
-    },
-    {
-      "section_title": "SECTION 16123 - BUILDING WIRE AND CABLE",
-      "content": "PART 1 GENERAL\\n\\n1.01 SECTION INCLUDES\\n\\nA. WIRE AND CABLE...\\n\\n[COMPLETE TEXT HERE]"
-    }
-  ]
-}
-
-CRITICAL: Construction decisions rely on complete, unaltered specifications. Even minor omissions or changes can cause legal and safety issues.
-    """,
-    
-    "General": """
-    Extract ALL relevant content and organize into a comprehensive, structured JSON:
-    
-    1. Identify the document type and organize data accordingly:
-       - For schedules: Create arrays of consistently structured objects
-       - For specifications: Preserve the complete text with hierarchical structure
-       - For drawings: Document all annotations, dimensions, and references
-    
-    2. Capture EVERY piece of information:
-       - Include ALL notes, annotations, and references
-       - Document ALL equipment, fixtures, and components
-       - Preserve ALL technical specifications and requirements
-    
-    3. Maintain relationships between elements:
-       - Link components to their locations (rooms, areas)
-       - Connect items to their technical specifications
-       - Reference related notes and details
-    
-    Structure everything into a clear, consistent JSON format that preserves ALL the original information.
-    """,
-    
-    # Electrical subtypes
-    "Electrical_PanelSchedule": """
-    You are an expert electrical engineer analyzing panel schedules. Your goal is to produce a precisely structured JSON representation with COMPLETE information.
-    
-    Extract and structure the following information with PERFECT accuracy:
-    
-    1. Panel metadata (create a 'panel' object):
-       - 'name': Panel name/ID (EXACTLY as written)
-       - 'location': Physical location of panel
-       - 'voltage': Full voltage specification (e.g., "120/208V Wye", "277/480V")
-       - 'phases': Number of phases (1 or 3) and wires (e.g., "3 Phase 4 Wire")
-       - 'amperage': Main amperage rating
-       - 'main_breaker': Main breaker size if present
-       - 'aic_rating': AIC/interrupting rating
-       - 'feed': Source information (fed from)
-       - Any additional metadata present (enclosure type, mounting, etc.)
-       
-    2. Circuit information (create a 'circuits' array with objects for EACH circuit):
-       - 'circuit': Circuit number or range EXACTLY as shown (e.g., "1", "2-4-6", "3-5")
-       - 'trip': Breaker/trip size with units (e.g., "20A", "70 A")
-       - 'poles': Number of poles (1, 2, or 3)
-       - 'load_name': Complete description of the connected load
-       - 'equipment_ref': Reference to equipment ID if available
-       - 'room_id': Connected room(s) if specified
-       - Any additional circuit information present
-       
-    3. Additional information:
-       - 'panel_totals': Connected load, demand factors, and calculated loads
-       - 'notes': Any notes specific to the panel
-       
-    CRITICAL: EVERY circuit must be documented EXACTLY as shown on the schedule. Missing circuits, incorrect numbering, or incomplete information can cause dangerous installation errors.
-    """,
-    
-    "Electrical_Lighting": """
-    You are extracting complete lighting fixture and control information.
-    
-    1. Create a comprehensive 'lighting_fixtures' array with details for EACH fixture:
-       - 'type_mark': Fixture type designation (EXACTLY as shown)
-       - 'description': Complete fixture description
-       - 'manufacturer': Manufacturer name
-       - 'product_number': Model or catalog number
-       - 'lamp_type': Complete lamp specification (e.g., "LED, 35W, 3500K")
-       - 'mounting': Mounting type and height
-       - 'voltage': Operating voltage
-       - 'wattage': Power consumption
-       - 'dimensions': Complete fixture dimensions
-       - 'count': Quantity of fixtures when specified
-       - 'location': Installation locations
-       - 'dimmable': Dimming capability and type
-       - 'remarks': Any special notes or requirements
-       
-    2. Document all lighting controls with specific details:
-       - Switch types and functions
-       - Sensors (occupancy, vacancy, daylight)
-       - Dimming systems and protocols
-       - Control zones and relationships
-       
-    3. Document circuit assignments:
-       - Panel and circuit numbers
-       - Connected areas and zones
-       - Load calculations
-       
-    IMPORTANT: Capture EVERY fixture type and ALL specifications. Missing or incorrect information
-    can lead to incompatible installations and lighting failure.
-    """,
-    
-    "Electrical_Power": """
-    Extract ALL power distribution and equipment connection information with complete detail:
-    
-    1. Document all outlets and receptacles in an organized array:
-       - Type (standard, GFCI, special purpose, isolated ground)
-       - Voltage and amperage ratings
-       - Mounting height and orientation
-       - Circuit assignment (panel and circuit number)
-       - Room location and mounting surface
-       - NEMA configuration
-       
-    2. Create a structured array of equipment connections:
-       - Equipment type and designation
-       - Power requirements (voltage, phase, amperage)
-       - Connection method (hardwired, cord-and-plug)
-       - Circuit assignment
-       - Disconnecting means
-       
-    3. Detail specialized power systems:
-       - UPS connections and specifications
-       - Emergency or standby power
-       - Isolated power systems
-       - Specialty voltage requirements
-       
-    4. Document all keyed notes related to power:
-       - Special installation requirements
-       - Code compliance notes
-       - Coordination requirements
-       
-    IMPORTANT: ALL power elements must be captured with their EXACT specifications.
-    Electrical inspectors will verify these details during installation.
-    """,
-    
-    "Electrical_FireAlarm": """
-    Extract complete fire alarm system information with precise detail:
-    
-    1. Document ALL devices in a structured array:
-       - Device type (smoke detector, heat detector, pull station, etc.)
-       - Model number and manufacturer
-       - Mounting height and location
-       - Zone/circuit assignment
-       - Addressable or conventional designation
-       
-    2. Identify all control equipment:
-       - Fire alarm control panel specifications
-       - Power supplies and battery calculations
-       - Remote annunciators
-       - Auxiliary control functions
-       
-    3. Capture ALL wiring specifications:
-       - Circuit types (initiating, notification, signaling)
-       - Wire types, sizes, and ratings
-       - Survivability requirements
-       
-    4. Document interface requirements:
-       - Sprinkler system monitoring
-       - Elevator recall functions
-       - HVAC shutdown
-       - Door holder/closer release
-       
-    CRITICAL: Fire alarm systems are life-safety systems subject to strict code enforcement.
-    ALL components and functions must be documented exactly as specified to ensure proper operation.
-    """,
-    
-    "Electrical_Technology": """
-    Extract ALL low voltage systems information with complete technical detail:
-    
-    1. Document data/telecom infrastructure in structured arrays:
-       - Outlet types and locations
-       - Cable specifications (category, shielding)
-       - Mounting heights and orientations
-       - Pathway types and sizes
-       - Equipment rooms, racks, and cabinets
-       
-    2. Identify security systems with specific details:
-       - Camera types, models, and coverage areas
-       - Access control devices and door hardware
-       - Intrusion detection sensors and zones
-       - Control equipment and monitoring requirements
-       
-    3. Document audiovisual systems:
-       - Display types, sizes, and mounting details
-       - Audio equipment and speaker layout
-       - Control systems and interfaces
-       - Signal routing and processing
-       
-    4. Capture specialty systems:
-       - Nurse call or emergency communication
-       - Distributed antenna systems (DAS)
-       - Paging and intercom
-       - Radio and wireless systems
-       
-    IMPORTANT: Technology systems require precise documentation to ensure proper integration.
-    ALL components, connections, and configurations must be captured as specified.
-    """,
-    
-    # Architectural subtypes
-    "Architectural_FloorPlan": """
-    Extract COMPLETE floor plan information with precise room-by-room detail:
-    
-    1. Create a comprehensive 'rooms' array with objects for EACH room, capturing:
-       - 'number': Room number EXACTLY as shown (including prefixes/suffixes)
-       - 'name': Complete room name
-       - 'dimensions': Length, width, and area when available
-       - 'adjacent_rooms': List of connecting room numbers
-       - 'wall_types': Wall construction for each room boundary (north/south/east/west)
-       - 'door_numbers': Door numbers providing access to the room
-       - 'window_numbers': Window numbers in the room
-       
-    2. Document circulation paths with specific details:
-       - Corridor widths and clearances
-       - Stair dimensions and configurations
-       - Elevator locations and sizes
-       - Exit paths and egress requirements
-       
-    3. Identify area designations and zoning:
-       - Fire-rated separations and occupancy boundaries
-       - Smoke compartments
-       - Security zones
-       - Department or functional areas
-       
-    CRITICAL: EVERY room must be documented with ALL available information.
-    Missing rooms or incomplete details can cause serious coordination issues across all disciplines.
-    When room information is unclear or incomplete, note this in the output.
-    """,
-    
-    "Architectural_ReflectedCeiling": """
-    Extract ALL ceiling information with complete room-by-room detail:
-    
-    1. Create a comprehensive 'rooms' array with ceiling-specific objects for EACH room:
-       - 'number': Room number EXACTLY as shown
-       - 'name': Complete room name
-       - 'ceiling_type': Material and system (e.g., "2x2 ACT", "GWB")
-       - 'ceiling_height': Height above finished floor (with units)
-       - 'soffit_heights': Heights of any soffits or bulkheads
-       - 'slope': Ceiling slope information if applicable
-       - 'fixtures': Array of ceiling-mounted elements (lights, diffusers, sprinklers)
-       
-    2. Document ceiling transitions with specific details:
-       - Height changes between areas
-       - Bulkhead and soffit dimensions
-       - Special ceiling features (clouds, islands)
-       
-    3. Identify ceiling-mounted elements:
-       - Lighting fixtures (coordinated with electrical)
-       - HVAC diffusers and registers
-       - Sprinkler heads and fire alarm devices
-       - Specialty items (projector mounts, speakers)
-       
-    IMPORTANT: Ceiling coordination is critical for clash detection.
-    EVERY room must have complete ceiling information to prevent conflicts with mechanical, 
-    electrical, and plumbing systems during installation.
-    """,
-    
-    "Architectural_Partition": """
-    Extract ALL wall and partition information with precise construction details:
-    
-    1. Create a comprehensive 'wall_types' array with objects for EACH type:
-       - 'type': Wall type designation EXACTLY as shown
-       - 'description': Complete description of the wall assembly
-       - 'details': Object containing:
-         - 'stud_type': Material and thickness (steel, wood)
-         - 'stud_width': Dimension with units
-         - 'stud_spacing': Spacing with units
-         - 'layers': Complete description of all layers from exterior to interior
-         - 'insulation': Type and R-value
-         - 'total_thickness': Overall dimension with units
-       - 'fire_rating': Fire resistance rating with duration
-       - 'sound_rating': STC or other acoustic rating
-       - 'height': Height designation ("to deck", "above ceiling")
-       
-    2. Document room-to-wall type relationships:
-       - For each room, identify wall types used on each boundary (north/south/east/west)
-       - Note any special conditions or variations
-       
-    3. Identify special wall conditions:
-       - Seismic considerations
-       - Expansion/control joints
-       - Bracing requirements
-       - Wall transitions
-       
-    CRITICAL: Wall type details impact all disciplines (architectural, structural, mechanical, electrical).
-    EVERY wall type must be fully documented with ALL construction details to ensure proper installation.
-    """,
-    
-    "Architectural_Details": """
-    Extract ALL architectural details with complete construction information:
-    
-    1. Document each architectural detail:
-       - Detail number and reference
-       - Complete description of the assembly
-       - Materials and dimensions
-       - Connection methods and fastening
-       - Finish requirements
-       
-    2. Capture specific assembly information:
-       - Waterproofing and flashing details
-       - Thermal and moisture protection
-       - Acoustic treatments
-       - Fire and smoke barriers
-       
-    3. Document all annotations and notes:
-       - Construction requirements
-       - Installation sequence
-       - Quality standards
-       - Reference standards
-       
-    IMPORTANT: Architectural details provide critical information for proper construction.
-    ALL detail information must be captured exactly as specified to ensure code compliance
-    and proper installation.
-    """,
-    
-    "Architectural_Schedules": """
-    Extract ALL architectural schedules with complete information for each element:
-    
-    1. Door schedules with comprehensive detail:
-       - Door number EXACTLY as shown
-       - Type, size (width, height, thickness)
-       - Material and finish
-       - Fire rating and label requirements
-       - Frame type and material
-       - Hardware sets and special requirements
-       
-    2. Window schedules with specific details:
-       - Window number and type
-       - Dimensions and configuration
-       - Glazing type and performance ratings
-       - Frame material and finish
-       - Operating requirements
-       
-    3. Room finish schedules:
-       - Room number and name
-       - Floor, base, wall, and ceiling finishes
-       - Special treatments or requirements
-       - Finish transitions
-       
-    4. Accessory and equipment schedules:
-       - Item designations and types
-       - Mounting heights and locations
-       - Material and finish specifications
-       - Quantities and installation notes
-       
-    CRITICAL: Schedule information is used by multiple trades and disciplines.
-    EVERY scheduled item must be completely documented with ALL specifications to ensure
-    proper procurement and installation.
+def traverse_job_folder(job_folder: str) -> List[str]:
     """
-}
-
-def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
+    Traverse the job folder and collect all PDF files.
     """
-    Detect more specific drawing subtype based on drawing type and filename.
-    
-    Args:
-        drawing_type: Main drawing type (Electrical, Architectural, etc.)
-        file_name: Name of the file being processed
-        
-    Returns:
-        More specific subtype or the original drawing type if no subtype detected
-    """
-    if not file_name or not drawing_type:
-        return drawing_type
-    
-    file_name_lower = file_name.lower()
-    
-    # Enhanced specification detection - check this first for efficiency
-    if "specification" in drawing_type.lower() or any(term in file_name_lower for term in 
-                                                   ["spec", "specification", ".spec", "e0.01"]):
-        return DrawingCategory.SPECIFICATIONS.value
-    
-    # Electrical subtypes
-    if drawing_type == DrawingCategory.ELECTRICAL.value:
-        # Panel schedules
-        if any(term in file_name_lower for term in ["panel", "schedule", "panelboard", "circuit", "h1", "l1", "k1", "k1s", "21lp-1", "20h-1"]):
-            return f"{drawing_type}_{ElectricalSubtype.PANEL_SCHEDULE.value}"
-        # Lighting fixtures and controls
-        elif any(term in file_name_lower for term in ["light", "lighting", "fixture", "lamp", "luminaire", "rcp", "ceiling"]):
-            return f"{drawing_type}_{ElectricalSubtype.LIGHTING.value}"
-        # Power distribution
-        elif any(term in file_name_lower for term in ["power", "outlet", "receptacle", "equipment", "connect", "riser", "metering"]):
-            return f"{drawing_type}_{ElectricalSubtype.POWER.value}"
-        # Fire alarm systems
-        elif any(term in file_name_lower for term in ["fire", "alarm", "fa", "detection", "smoke", "emergency", "evacuation"]):
-            return f"{drawing_type}_{ElectricalSubtype.FIREALARM.value}"
-        # Low voltage systems
-        elif any(term in file_name_lower for term in ["tech", "data", "comm", "security", "av", "low voltage", "telecom", "network"]):
-            return f"{drawing_type}_{ElectricalSubtype.TECHNOLOGY.value}"
-        # Specifications
-        elif any(term in file_name_lower for term in ["spec", "specification", "requirement"]):
-            return f"{drawing_type}_{ElectricalSubtype.SPEC.value}"
-    
-    # Architectural subtypes
-    elif drawing_type == DrawingCategory.ARCHITECTURAL.value:
-        # Reflected ceiling plans
-        if any(term in file_name_lower for term in ["rcp", "ceiling", "reflected"]):
-            return f"{drawing_type}_{ArchitecturalSubtype.CEILING.value}"
-        # Wall types and partitions
-        elif any(term in file_name_lower for term in ["partition", "wall type", "wall-type", "wall", "room wall"]):
-            return f"{drawing_type}_{ArchitecturalSubtype.WALL.value}"
-        # Floor plans
-        elif any(term in file_name_lower for term in ["floor", "plan", "layout", "room"]):
-            return f"{drawing_type}_{ArchitecturalSubtype.ROOM.value}"
-        # Door and window schedules
-        elif any(term in file_name_lower for term in ["door", "window", "hardware", "schedule"]):
-            return f"{drawing_type}_{ArchitecturalSubtype.DOOR.value}"
-        # Architectural details
-        elif any(term in file_name_lower for term in ["detail", "section", "elevation", "assembly"]):
-            return f"{drawing_type}_{ArchitecturalSubtype.DETAIL.value}"
-    
-    # Mechanical subtypes
-    elif drawing_type == DrawingCategory.MECHANICAL.value:
-        # Equipment schedules
-        if any(term in file_name_lower for term in ["equip", "unit", "ahu", "rtu", "vav", "schedule"]):
-            return f"{drawing_type}_{MechanicalSubtype.EQUIPMENT.value}"
-        # Ventilation systems
-        elif any(term in file_name_lower for term in ["vent", "air", "supply", "return", "diffuser", "grille"]):
-            return f"{drawing_type}_{MechanicalSubtype.VENTILATION.value}"
-        # Piping systems
-        elif any(term in file_name_lower for term in ["pipe", "chilled", "heating", "cooling", "refrigerant"]):
-            return f"{drawing_type}_{MechanicalSubtype.PIPING.value}"
-    
-    # Plumbing subtypes
-    elif drawing_type == DrawingCategory.PLUMBING.value:
-        # Fixture schedules
-        if any(term in file_name_lower for term in ["fixture", "sink", "toilet", "shower", "schedule"]):
-            return f"{drawing_type}_{PlumbingSubtype.FIXTURE.value}"
-        # Equipment
-        elif any(term in file_name_lower for term in ["equip", "heater", "pump", "water", "schedule"]):
-            return f"{drawing_type}_{PlumbingSubtype.EQUIPMENT.value}"
-        # Piping systems
-        elif any(term in file_name_lower for term in ["pipe", "riser", "water", "sanitary", "vent"]):
-            return f"{drawing_type}_{PlumbingSubtype.PIPE.value}"
-    
-    # If no subtype detected, return the main type
-    return drawing_type
-
-class ModelType(Enum):
-    """Enumeration of supported AI model types."""
-    GPT_4O_MINI = "gpt-4o-mini"  # Updated to remove date-specific version
-    GPT_4O = "gpt-4o"  # Updated to remove date-specific version
-
-def optimize_model_parameters(
-    drawing_type: str,
-    raw_content: str,
-    file_name: str
-) -> Dict[str, Any]:
-    """
-    Determine optimal model parameters based on drawing type and content.
-    
-    Args:
-        drawing_type: Type of drawing (Architectural, Electrical, etc.)
-        raw_content: Raw content from the drawing
-        file_name: Name of the file being processed
-        
-    Returns:
-        Dictionary of optimized parameters
-    """
-    from dotenv import load_dotenv
-    load_dotenv(override=True)  # Reload to ensure we get the latest env values
-    
-    from config.settings import get_force_mini_model  # Import the function instead
-    
-    content_length = len(raw_content)
-    
-    # Default parameters
-    params = {
-        "model_type": ModelType.GPT_4O_MINI,
-        "temperature": 0.1,  # Reduced default temperature for more consistent output
-        "max_tokens": 16000,
-    }
-    
-    # Force mini model if flag is set - this will override all other logic
-    if get_force_mini_model():
-        logging.info(f"Forcing gpt-4o-mini model for testing: {file_name}")
-        return params
-    
-    # For very long content or complex documents, use more powerful model
-    if content_length > 50000 or "specification" in drawing_type.lower():
-        params["model_type"] = ModelType.GPT_4O
-        # Calculate max_tokens dynamically based on content length
-        # Estimate token count as roughly chars/4 for English text
-        estimated_input_tokens = min(128000, len(raw_content) // 4)  # Cap at 128k tokens maximum
-        # Reserve at least 8000 tokens for output, but don't exceed model context limits
-        params["max_tokens"] = max(8000, min(14000, 32000 - estimated_input_tokens))
-    
-    # Adjust based on drawing type
-    if "Electrical" in drawing_type:
-        # Panel schedules need lowest temperature for precision
-        if "PanelSchedule" in drawing_type:
-            params["temperature"] = 0.05
-            # Use more capable model for complex panel schedules
-            if content_length > 15000:
-                params["model_type"] = ModelType.GPT_4O
-        # Other electrical drawings need precision too
-        else:
-            params["temperature"] = 0.1
-    
-    elif "Architectural" in drawing_type:
-        # Room information needs precision but some inference
-        if "FloorPlan" in drawing_type or "ReflectedCeiling" in drawing_type:
-            params["temperature"] = 0.1
-            if content_length > 20000:
-                params["model_type"] = ModelType.GPT_4O
-    
-    # For mechanical drawings (schedules, equipment, etc.)
-    elif "Mechanical" in drawing_type:
-        # Increase temperature for more flexible processing of mechanical information
-        params["temperature"] = 0.3
-        
-        # For mechanical schedules, ensure adequate token allocation
-        if any(term in file_name.lower() for term in ["schedule", "equip"]):
-            params["max_tokens"] = min(params["max_tokens"], 8000)
-            
-            # For complex mechanical schedules, consider using more powerful model
-            if content_length > 20000:
-                params["model_type"] = ModelType.GPT_4O
-                logging.info(f"Using GPT-4o for complex mechanical schedule: {file_name}")
-    
-    # For specifications, use more powerful model and lower temperature
-    if "SPECIFICATION" in file_name.upper() or "Specifications" in drawing_type:
-        logging.info(f"Processing specification document ({content_length} chars)")
-        
-        # Use a slightly higher temperature - reduces "overthinking" while maintaining accuracy
-        params["temperature"] = 0.2
-        
-        # Implement smart model selection based on content length
-        if content_length < 30000:  # For shorter specifications
-            params["model_type"] = ModelType.GPT_4O_MINI
-            logging.info(f"Using GPT-4o-mini for shorter specification document: {file_name}")
-        else:
-            params["model_type"] = ModelType.GPT_4O
-            logging.info(f"Using GPT-4o for complex specification document: {file_name}")
-        
-        # Calculate max_tokens more efficiently
-        estimated_input_tokens = min(100000, len(raw_content) // 4)
-        params["max_tokens"] = max(6000, min(12000, 28000 - estimated_input_tokens))
-    
-    # Safety check: ensure max_tokens is within reasonable limits
-    params["max_tokens"] = min(params["max_tokens"], 16000)
-    
-    logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} and max_tokens {params['max_tokens']}")
-    
-    return params
-
-T = TypeVar('T')
-
-class AiRequest:
-    """
-    Class to hold AI API request parameters.
-    """
-    def __init__(
-        self,
-        content: str,
-        model_type: 'ModelType' = None,
-        temperature: float = 0.2,
-        max_tokens: int = 3000,
-        system_message: str = ""
-    ):
-        """
-        Initialize an AiRequest.
-        
-        Args:
-            content: Content to send to the API
-            model_type: Model type to use
-            temperature: Temperature parameter
-            max_tokens: Maximum tokens to generate
-            system_message: System message to use
-        """
-        self.content = content
-        self.model_type = model_type
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.system_message = system_message
-
-class AiResponse(Generic[T]):
-    """
-    Generic class to hold AI API response data or errors.
-    """
-    def __init__(self, success: bool = True, content: str = "", parsed_content: Optional[T] = None, error: str = ""):
-        """
-        Initialize an AiResponse.
-        
-        Args:
-            success: Whether the API call was successful
-            content: Raw content from the API
-            parsed_content: Optional parsed content (of generic type T)
-            error: Error message if the call failed
-        """
-        self.success = success
-        self.content = content
-        self.parsed_content = parsed_content
-        self.error = error
-
-class DrawingAiService:
-    """
-    Specialized AI service for processing construction drawings.
-    """
-    def __init__(self, client: AsyncOpenAI, drawing_instructions: Dict[str, str] = None, logger: Optional[logging.Logger] = None):
-        """
-        Initialize the DrawingAiService.
-
-        Args:
-            client: AsyncOpenAI client instance
-            drawing_instructions: Optional dictionary of drawing type-specific instructions
-            logger: Optional logger instance
-        """
-        self.client = client
-        self.drawing_instructions = drawing_instructions or DRAWING_INSTRUCTIONS
-        self.logger = logger or logging.getLogger(__name__)
-
-    def _get_default_system_message(self, drawing_type: str) -> str:
-        """
-        Get the default system message for the given drawing type with few-shot examples.
-        
-        Args:
-            drawing_type: Type of drawing (Architectural, Electrical, etc.) or subtype
-                
-        Returns:
-            System message string with examples
-        """
-        # Use the new prompt template module to get the appropriate template
-        return get_prompt_template(drawing_type)
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(Exception)
-    )
-    @time_operation("ai_processing")
-    async def process(self, request: AiRequest) -> AiResponse[Dict[str, Any]]:
-        """
-        Process an AI request.
-        
-        Args:
-            request: AiRequest object containing parameters
-            
-        Returns:
-            AiResponse with parsed content or error
-        """
-        try:
-            self.logger.info(f"Processing content of length {len(request.content)}")
-            
-            response = await self.client.chat.completions.create(
-                model=request.model_type.value,
-                messages=[
-                    {"role": "system", "content": request.system_message},
-                    {"role": "user", "content": request.content}
-                ],
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                response_format={"type": "json_object"}  # Ensure JSON response
-            )
-            
-            content = response.choices[0].message.content
-            
-            try:
-                parsed_content = json.loads(content)
-                return AiResponse(success=True, content=content, parsed_content=parsed_content)
-            except json.JSONDecodeError as e:
-                self.logger.error(f"JSON decoding error: {str(e)}")
-                self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
-                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}")
-        except Exception as e:
-            self.logger.error(f"Error processing drawing: {str(e)}")
-            return AiResponse(success=False, error=str(e))
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(Exception)
-    )
-    @time_operation("ai_processing")
-    async def process_drawing_with_responses(
-        self,
-        raw_content: str,
-        drawing_type: str,
-        temperature: float = 0.2,
-        max_tokens: int = 16000,
-        model_type: ModelType = ModelType.GPT_4O_MINI,
-        system_message: Optional[str] = None,
-        example_output: Optional[str] = None
-    ) -> AiResponse:
-        """
-        Process a drawing using the OpenAI API.
-        
-        Args:
-            raw_content: Complete raw content from the drawing - NO TRUNCATION
-            drawing_type: Type of drawing
-            temperature: Temperature parameter
-            max_tokens: Maximum tokens to generate
-            model_type: Model type to use
-            system_message: Optional system message
-            example_output: Optional example output for few-shot learning
-            
-        Returns:
-            AiResponse with parsed content or error
-        """
-        try:
-            self.logger.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters")
-            
-            messages = [
-                {"role": "system", "content": system_message or self._get_default_system_message(drawing_type)}
-            ]
-            
-            # Add example output if provided (few-shot learning)
-            if example_output:
-                messages.append({"role": "user", "content": "Please process this drawing content and convert it to structured JSON:"})
-                messages.append({"role": "assistant", "content": example_output})
-                messages.append({"role": "user", "content": "Now process this new drawing content in the same format:"})
-            
-            # Add the actual content to process
-            messages.append({"role": "user", "content": raw_content})
-            
-            response = await self.client.chat.completions.create(
-                model=model_type.value,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"}  # Ensure JSON response
-            )
-            
-            content = response.choices[0].message.content
-            
-            try:
-                parsed_content = json.loads(content)
-                return AiResponse(success=True, content=content, parsed_content=parsed_content)
-            except json.JSONDecodeError as e:
-                self.logger.error(f"JSON decoding error: {str(e)}")
-                self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
-                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}")
-        except Exception as e:
-            self.logger.error(f"Error processing drawing: {str(e)}")
-            return AiResponse(success=False, error=str(e))
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(Exception)
-    )
-    @time_operation("ai_processing")
-    async def process_with_prompt(
-        self,
-        raw_content: str,
-        temperature: float = 0.2,
-        max_tokens: int = 16000,
-        model_type: ModelType = ModelType.GPT_4O_MINI,
-        system_message: Optional[str] = None,
-        example_output: Optional[str] = None
-    ) -> str:
-        """
-        Process a drawing using a specific prompt, ensuring full content is sent to the API.
-        
-        Args:
-            raw_content: Raw content from the drawing
-            temperature: Temperature parameter for the AI model
-            max_tokens: Maximum tokens to generate
-            model_type: AI model type to use
-            system_message: Optional custom system message to override default
-            example_output: Optional example output for few-shot learning
-        
-        Returns:
-            Processed content as a JSON string
-
-        Raises:
-            JSONDecodeError: If the response is not valid JSON
-            ValueError: If the JSON structure is invalid
-            Exception: For other processing errors
-        """
-        default_system_message = """
-        You are an AI assistant specialized in construction drawings. Extract all relevant information from the provided content and organize it into a structured JSON object with these sections:
-        
-        - "metadata": An object containing drawing metadata such as "drawing_number", "title", "date", and "revision".
-        Include any available information; if a field is missing, omit it.
-        
-        - "schedules": An array of schedule objects. Each schedule should have a "type" (e.g., "electrical_panel",
-        "mechanical") and a "data" array containing objects with standardized field names. For panel schedules,
-        use consistent field names like "circuit" for circuit numbers, "trip" for breaker sizes, 
-        "load_name" for equipment descriptions, and "poles" for the number of poles.
-        
-        - "notes": An array of strings containing any notes or instructions found in the drawing.
-        
-        - "specifications": An array of objects, each with a "section_title" and "content" for specification sections.
-        
-        - "rooms": For architectural drawings, include an array of rooms with 'number', 'name', 'finish', 'height',
-        'electrical_info', and 'architectural_info'.
-        
-        CRITICAL REQUIREMENTS:
-        1. The JSON output MUST include ALL information from the drawing - nothing should be omitted
-        2. Structure data consistently with descriptive field names
-        3. Panel schedules MUST include EVERY circuit, with correct circuit numbers, trip sizes, and descriptions
-        4. For architectural drawings, ALWAYS include a 'rooms' array with ALL rooms
-        5. For specifications, preserve the COMPLETE text in the 'content' field
-        6. Ensure the output is valid JSON with no syntax errors
-        
-        Construction decisions will be based on this data, so accuracy and completeness are essential.
-        """
-
-        # Use the provided system message or fall back to default
-        final_system_message = system_message if system_message else default_system_message
-        
-        content_length = len(raw_content)
-        self.logger.info(f"Processing content of length {content_length} with model {model_type.value}")
-
-        # Check if content is too large and log a warning
-        if content_length > 250000 and model_type == ModelType.GPT_4O_MINI:
-            self.logger.warning(f"Content length ({content_length} chars) may exceed GPT-4o-mini context window. Switching to GPT-4o.")
-            model_type = ModelType.GPT_4O
-        
-        if content_length > 500000:
-            self.logger.warning(f"Content length ({content_length} chars) exceeds GPT-4o context window. Processing may be incomplete.")
-
-        try:
-            messages = [
-                {"role": "system", "content": final_system_message}
-            ]
-            
-            # Add example output if provided (few-shot learning)
-            if example_output:
-                messages.append({"role": "user", "content": "Please process this drawing content and convert it to structured JSON:"})
-                messages.append({"role": "assistant", "content": example_output})
-                messages.append({"role": "user", "content": "Now process this new drawing content in the same format:"})
-            
-            # Add the actual content to process
-            messages.append({"role": "user", "content": raw_content})
-            
-            # Calculate rough token estimate for logging
-            estimated_tokens = content_length // 4
-            self.logger.info(f"Estimated input tokens: ~{estimated_tokens}")
-            
-            try:
-                response = await self.client.chat.completions.create(
-                    model=model_type.value,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format={"type": "json_object"}  # Ensure JSON response
-                )
-                content = response.choices[0].message.content
-                
-                # Process usage information if available
-                if hasattr(response, 'usage') and response.usage:
-                    self.logger.info(f"Token usage - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}")
-                
-                try:
-                    # Validate JSON parsing
-                    parsed_content = json.loads(content)
-                    if not self.validate_json(parsed_content):
-                        self.logger.warning("JSON validation failed - missing required keys")
-                        # Still return the content, as it might be usable even with missing keys
-                    
-                    return content
-                except json.JSONDecodeError as e:
-                    self.logger.error(f"JSON decoding error: {str(e)}")
-                    self.logger.error(f"Raw content received: {content[:500]}...")  # Log the first 500 chars for debugging
-                    raise
-            except Exception as e:
-                if "maximum context length" in str(e).lower() or "token limit" in str(e).lower():
-                    self.logger.error(f"Context length exceeded: {str(e)}")
-                    raise ValueError(f"Content too large for model context window: {str(e)}")
-                else:
-                    self.logger.error(f"API error: {str(e)}")
-                    raise
-        except Exception as e:
-            self.logger.error(f"Error processing drawing: {str(e)}")
-            raise
-
-    def validate_json(self, json_data: Dict[str, Any]) -> bool:
-        """
-        Validate the JSON structure.
-
-        Args:
-            json_data: Parsed JSON data
-
-        Returns:
-            True if the JSON has all required keys, False otherwise
-        """
-        # Basic validation - check for required top-level keys
-        required_keys = ["metadata", "schedules", "notes"]
-        
-        # Specifications validation - check structure and convert if needed
-        if "specifications" in json_data:
-            specs = json_data["specifications"]
-            if isinstance(specs, list) and specs:
-                # Convert string arrays to object arrays if needed
-                if isinstance(specs[0], str):
-                    self.logger.warning("Converting specifications from string array to object array")
-                    json_data["specifications"] = [{"section_title": spec, "content": ""} for spec in specs]
-        else:
-            # Add empty specifications array if missing
-            json_data["specifications"] = []
-            
-        # For architectural drawings, check for rooms array
-        if "metadata" in json_data and "drawing_type" in json_data["metadata"]:
-            if "architectural" in json_data["metadata"]["drawing_type"].lower() and "rooms" not in json_data:
-                self.logger.warning("Architectural drawing missing 'rooms' array")
-                return False
-                
-        return all(key in json_data for key in required_keys)
-
-    async def get_example_output(self, drawing_type: str) -> Optional[str]:
-        """
-        Retrieve an example output for the given drawing type from a library of examples.
-        This enables few-shot learning for better consistency.
-        
-        Args:
-            drawing_type: Type of drawing
-            
-        Returns:
-            Example output as JSON string, or None if no example is available
-        """
-        # This would typically load from a database or file system
-        # For now, we'll return None as a placeholder
-        return None
-
-@time_operation("ai_processing")
-async def process_drawing(raw_content: str, drawing_type: str, client, file_name: str = "") -> str:
-    """
-    Use GPT to parse PDF text and table data into structured JSON based on the drawing type.
-    
-    Args:
-        raw_content: Raw content from the drawing
-        drawing_type: Type of drawing (Architectural, Electrical, etc.)
-        client: OpenAI client
-        file_name: Optional name of the file being processed
-        
-    Returns:
-        Structured JSON as a string
-        
-    Raises:
-        ValueError: If the content is too large for processing
-        JSONDecodeError: If the response is not valid JSON
-        Exception: For other processing errors
-    """
-    if not raw_content:
-        logging.warning(f"Empty content received for {file_name}. Cannot process.")
-        raise ValueError("Cannot process empty content")
-        
-    # Log details about processing task
-    content_length = len(raw_content)
-    drawing_type = drawing_type or "Unknown"
-    file_name = file_name or "Unknown"
-    
-    logging.info(f"Starting drawing processing: Type={drawing_type}, File={file_name}, Content length={content_length}")
-    
+    pdf_files = []
     try:
-        # Detect more specific drawing subtype
-        subtype = detect_drawing_subtype(drawing_type, file_name)
-        logging.info(f"Detected drawing subtype: {subtype}")
-        
-        # Create the AI service
-        ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
-        
-        # Get optimized parameters for this drawing
-        params = optimize_model_parameters(subtype, raw_content, file_name)
-        
-        # Try to get an example output for few-shot learning
-        example_output = await ai_service.get_example_output(subtype)
-        
-        # Check if this is a specification document
-        is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
-        
-        # Enhanced system message with different emphasis based on document type
-        if is_specification:
-            system_message = f"""
-            You are processing a SPECIFICATION document. Extract all relevant information and organize it into a JSON object.
-            
-            CRITICAL INSTRUCTIONS:
-            - In the 'specifications' array, create objects with 'section_title' and 'content' fields
-            - The 'section_title' should contain the section number and name (e.g., "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS")
-            - The 'content' field MUST contain the COMPLETE TEXT of each section, including all parts, subsections, and detailed requirements
-            - Preserve the hierarchical structure (SECTION > PART > SUBSECTION)
-            - Include all numbered and lettered items, paragraphs, tables, and detailed requirements
-            - Do not summarize or truncate - include the ENTIRE text of each section
-            
-            {DRAWING_INSTRUCTIONS.get("Specifications")}
-            
-            Ensure the output is valid JSON.
-            """
-        else:
-            # Get the appropriate system message based on detected subtype
-            type_instruction = DRAWING_INSTRUCTIONS.get(subtype, DRAWING_INSTRUCTIONS.get(drawing_type, DRAWING_INSTRUCTIONS["General"]))
-            
-            system_message = f"""
-            You are processing a construction drawing of type: {subtype}
-            
-            Extract ALL relevant information and organize it into a comprehensive JSON object with the following sections:
-            - 'metadata': Object containing drawing number, title, date, and any other identifying information
-            - 'schedules': Array of schedules with type and data using consistent field names
-            - 'notes': Array of all notes and annotations
-            - 'specifications': Array of specification sections with 'section_title' and 'content'
-            - Other sections as appropriate for this drawing type
-            
-            {type_instruction}
-            
-            CRITICAL: Your output MUST include ALL information from the drawing - nothing should be omitted.
-            Use consistent field names for similar data (e.g., "circuit", "trip", "load_name" for panel schedules).
-            For architectural drawings, ALWAYS include a 'rooms' array with ALL rooms.
-            
-            Engineers, contractors, and installers will rely on this data for construction decisions.
-            Accuracy and completeness are essential to prevent costly mistakes and safety issues.
-            """
-        
-        # Process the drawing using the most appropriate method
-        try:
-            response = await ai_service.process_with_prompt(
-                raw_content=raw_content,
-                temperature=params["temperature"],
-                max_tokens=params["max_tokens"],
-                model_type=params["model_type"],
-                system_message=system_message,
-                example_output=example_output
-            )
-            
-            # Validate JSON structure
-            try:
-                parsed = json.loads(response)
-                logging.info(f"Successfully processed {subtype} drawing ({len(response)} chars output)")
-                return response
-            except json.JSONDecodeError:
-                logging.error(f"Invalid JSON response from AI service for {file_name}")
-                raise
-                
-        except ValueError as e:
-            if "content too large" in str(e).lower():
-                logging.error(f"Content too large for {file_name}: {str(e)}")
-                raise ValueError(f"Drawing content exceeds model context limits: {str(e)}")
-            else:
-                logging.error(f"Value error processing {file_name}: {str(e)}")
-                raise
-                
+        for root, _, files in os.walk(job_folder):
+            for file in files:
+                if file.lower().endswith('.pdf'):
+                    pdf_files.append(os.path.join(root, file))
+        logger.info(f"Found {len(pdf_files)} PDF files in {job_folder}")
     except Exception as e:
-        logging.error(f"Error processing {drawing_type} drawing '{file_name}': {str(e)}")
-        raise
-
-@time_operation("ai_processing")
-async def process_drawing_with_examples(raw_content: str, drawing_type: str, client, file_name: str = "", example_outputs: List[str] = None) -> str:
-    """
-    Process a drawing using few-shot learning with example outputs.
-    
-    Args:
-        raw_content: Raw content from the drawing
-        drawing_type: Type of drawing
-        client: OpenAI client
-        file_name: Optional name of the file being processed
-        example_outputs: List of example JSON outputs for few-shot learning
-        
-    Returns:
-        Structured JSON as a string
-        
-    Raises:
-        ValueError: If the content is too large for processing
-        JSONDecodeError: If the response is not valid JSON
-        Exception: For other processing errors
-    """
-    if not raw_content:
-        logging.warning(f"Empty content received for {file_name}. Cannot process.")
-        raise ValueError("Cannot process empty content")
-    
-    # Log details about the processing task
-    content_length = len(raw_content)
-    drawing_type = drawing_type or "Unknown"
-    file_name = file_name or "Unknown"
-    
-    logging.info(f"Starting drawing processing with examples: Type={drawing_type}, File={file_name}, Content length={content_length}")
-    logging.info(f"Number of example outputs provided: {len(example_outputs) if example_outputs else 0}")
-    
-    try:
-        # Detect more specific drawing subtype
-        subtype = detect_drawing_subtype(drawing_type, file_name)
-        logging.info(f"Detected drawing subtype: {subtype}")
-        
-        # Create the AI service
-        ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
-        
-        # Get optimized parameters for this drawing
-        params = optimize_model_parameters(subtype, raw_content, file_name)
-        
-        # Check if this is a specification document
-        is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
-        
-        # Base system message with type-specific instructions
-        type_instruction = DRAWING_INSTRUCTIONS.get(subtype, DRAWING_INSTRUCTIONS.get(drawing_type, DRAWING_INSTRUCTIONS["General"]))
-        
-        system_message = f"""
-        You are a construction drawing expert tasked with extracting ALL information from {subtype} drawings.
-        
-        Your job is to convert raw drawing content into structured JSON following the exact format shown in the examples.
-        Pay close attention to field names and structure used in the examples - your output should match this format.
-        
-        {type_instruction}
-        
-        CRITICAL REQUIREMENTS:
-        1. Extract EVERY piece of information from the drawing - nothing should be omitted
-        2. Use the EXACT same field names and structure as shown in the examples
-        3. Include ALL circuits in panel schedules, ALL rooms in architectural drawings, etc.
-        4. When in doubt about a field name, check the examples first
-        5. Ensure your output is valid JSON with no syntax errors
-        
-        Construction decisions will be based on this data, so accuracy and completeness are essential.
-        """
-        
-        # Process using the examples-based approach
-        try:
-            if example_outputs and len(example_outputs) > 0:
-                # Use first example only as some APIs have token limits
-                example = example_outputs[0]
-                logging.info("Processing with example-based learning")
-                response = await ai_service.process_with_prompt(
-                    raw_content=raw_content,
-                    temperature=params["temperature"],
-                    max_tokens=params["max_tokens"],
-                    model_type=params["model_type"],
-                    system_message=system_message,
-                    example_output=example
-                )
-            else:
-                # No examples provided, fall back to standard processing
-                logging.info("No examples provided, falling back to standard processing")
-                response = await process_drawing(raw_content, drawing_type, client, file_name)
-            
-            # Validate JSON structure
-            try:
-                parsed = json.loads(response)
-                logging.info(f"Successfully processed {subtype} drawing with examples ({len(response)} chars output)")
-                return response
-            except json.JSONDecodeError:
-                logging.error(f"Invalid JSON response from AI service for {file_name}")
-                raise
-        
-        except ValueError as e:
-            if "content too large" in str(e).lower():
-                logging.error(f"Content too large for {file_name}: {str(e)}")
-                raise ValueError(f"Drawing content exceeds model context limits: {str(e)}")
-            else:
-                logging.error(f"Value error processing {file_name}: {str(e)}")
-                raise
-        
-    except Exception as e:
-        logging.error(f"Error processing {drawing_type} drawing '{file_name}' with examples: {str(e)}")
-        raise
+        logger.error(f"Error traversing job folder {job_folder}: {str(e)}")
+    return pdf_files
 ```
 
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/extraction_service.py
@@ -3236,11 +1380,6 @@ def create_extractor(drawing_type: str, logger: Optional[logging.Logger] = None)
         return PyMuPdfExtractor(logger) 
 ```
 
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/__init__.py
-```py
-# Services package initialization 
-```
-
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/storage_service.py
 ```py
 """
@@ -3429,11 +1568,135 @@ class FileSystemStorage(StorageService):
             return None 
 ```
 
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/e_rooms_template.json
+```json
+{
+    "room_id": "",
+    "room_name": "",
+    "circuits": {
+        "lighting": [],
+        "power": []
+    },
+    "light_fixtures": {
+        "fixture_ids": [],
+        "fixture_count": {}
+    },
+    "outlets": {
+        "regular_outlets": 0,
+        "controlled_outlets": 0
+    },
+    "data": 0,
+    "floor_boxes": 0,
+    "mechanical_equipment": [],
+    "switches": {
+        "type": "",
+        "model": "",
+        "dimming": ""
+    }
+} 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/__init__.py
+```py
+# Services package initialization 
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/__init__.py
+```py
+# Processing package initialization
+
+```
+
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompts/__init__.py
 ```py
 """
 Prompt template package for different drawing types.
 """
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/room_templates.py
+```py
+import json
+import os
+
+def load_template(template_name):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    template_path = os.path.join(current_dir, f"{template_name}_template.json")
+    try:
+        with open(template_path, 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        print(f"Template file not found: {template_path}")
+        return {}
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON from file: {template_path}")
+        return {}
+
+def generate_rooms_data(parsed_data, room_type):
+    template = load_template(room_type)
+    
+    metadata = parsed_data.get('metadata', {})
+    
+    rooms_data = {
+        "metadata": metadata,
+        "project_name": metadata.get('project', ''),
+        "floor_number": '',
+        "rooms": []
+    }
+    
+    parsed_rooms = parsed_data.get('rooms', [])
+    
+    if not parsed_rooms:
+        print(f"No rooms found in parsed data for {room_type}.")
+        return rooms_data
+
+    for parsed_room in parsed_rooms:
+        room_number = str(parsed_room.get('number', ''))
+        room_name = parsed_room.get('name', '')
+        
+        if not room_number or not room_name:
+            print(f"Skipping room with incomplete data: {parsed_room}")
+            continue
+        
+        room_data = template.copy()
+        room_data['room_id'] = f"Room_{room_number}"
+        room_data['room_name'] = f"{room_name}_{room_number}"
+        
+        # Copy all fields from parsed_room to room_data
+        for key, value in parsed_room.items():
+            if key not in ['number', 'name']:
+                room_data[key] = value
+        
+        rooms_data['rooms'].append(room_data)
+    
+    return rooms_data
+
+def process_architectural_drawing(parsed_data, file_path, output_folder):
+    """
+    Process architectural drawing data (parsed JSON),
+    and generate both e_rooms and a_rooms JSON outputs.
+    """
+    is_reflected_ceiling = "REFLECTED CEILING PLAN" in file_path.upper()
+    
+    floor_number = ''  # If floor number is available in the future, extract it here
+    
+    e_rooms_data = generate_rooms_data(parsed_data, 'e_rooms')
+    a_rooms_data = generate_rooms_data(parsed_data, 'a_rooms')
+    
+    e_rooms_file = os.path.join(output_folder, f'e_rooms_details_floor_{floor_number}.json')
+    a_rooms_file = os.path.join(output_folder, f'a_rooms_details_floor_{floor_number}.json')
+    
+    with open(e_rooms_file, 'w') as f:
+        json.dump(e_rooms_data, f, indent=2)
+    with open(a_rooms_file, 'w') as f:
+        json.dump(a_rooms_data, f, indent=2)
+    
+    return {
+        "e_rooms_file": e_rooms_file,
+        "a_rooms_file": a_rooms_file,
+        "is_reflected_ceiling": is_reflected_ceiling
+    }
 
 ```
 
@@ -3960,6 +2223,23 @@ GENERAL_PROMPT = general_prompt()
 
 ```
 
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/a_rooms_template.json
+```json
+{
+    "room_id": "",
+    "room_name": "",
+    "walls": {
+      "north": "",
+      "south": "",
+      "east": "",
+      "west": ""
+    },
+    "ceiling_height": "",
+    "dimensions": ""
+}
+
+```
+
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompts/mechanical.py
 ```py
 """
@@ -4172,6 +2452,2025 @@ MECHANICAL_PROMPTS = {
 
 ```
 
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompt_registry.py
+```py
+"""
+Registry system for managing prompt templates.
+"""
+from typing import Dict, Callable, Optional
+
+# Define prompt registry as a dictionary of factories
+PROMPT_REGISTRY: Dict[str, Callable[[], str]] = {}
+
+def register_prompt(category: str, subtype: Optional[str] = None):
+    """
+    Decorator to register a prompt factory function.
+    
+    Args:
+        category: Drawing category (e.g., "Electrical")
+        subtype: Drawing subtype (e.g., "PanelSchedule")
+        
+    Returns:
+        Decorator function that registers the decorated function
+    """
+    key = f"{category}_{subtype}" if subtype else category
+    
+    def decorator(func: Callable[[], str]):
+        PROMPT_REGISTRY[key.upper()] = func
+        return func
+    
+    return decorator
+
+def get_registered_prompt(drawing_type: str) -> str:
+    """
+    Get prompt using registry with fallbacks.
+    
+    Args:
+        drawing_type: Type of drawing (e.g., "Electrical_PanelSchedule")
+        
+    Returns:
+        Prompt template string
+    """
+    # Handle case where drawing_type is None
+    if not drawing_type:
+        return PROMPT_REGISTRY.get("GENERAL", lambda: "")()
+        
+    # Normalize the key
+    key = drawing_type.upper().replace(" ", "_")
+    
+    # Try exact match first
+    if key in PROMPT_REGISTRY:
+        return PROMPT_REGISTRY[key]()
+    
+    # Try main category
+    main_type = key.split("_")[0]
+    if main_type in PROMPT_REGISTRY:
+        return PROMPT_REGISTRY[main_type]()
+    
+    # Fall back to general
+    return PROMPT_REGISTRY.get("GENERAL", lambda: "")()
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompt_templates.py
+```py
+"""
+Main interface module for accessing prompt templates.
+"""
+
+from typing import Dict, Optional
+
+# Import prompt dictionaries from each category
+from templates.prompts.architectural import ARCHITECTURAL_PROMPTS
+from templates.prompts.electrical import ELECTRICAL_PROMPTS
+from templates.prompts.mechanical import MECHANICAL_PROMPTS
+from templates.prompts.plumbing import PLUMBING_PROMPTS
+from templates.prompts.general import GENERAL_PROMPT
+
+# Import registry for more flexible prompt retrieval
+from templates.prompt_registry import get_registered_prompt
+
+# Mapping of main drawing types to prompt dictionaries (for backward compatibility)
+PROMPT_CATEGORIES = {
+    "Architectural": ARCHITECTURAL_PROMPTS,
+    "Electrical": ELECTRICAL_PROMPTS, 
+    "Mechanical": MECHANICAL_PROMPTS,
+    "Plumbing": PLUMBING_PROMPTS
+}
+
+def get_prompt_template(drawing_type: str) -> str:
+    """
+    Get the appropriate prompt template based on drawing type.
+    
+    Args:
+        drawing_type: Type of drawing (e.g., "Architectural", "Electrical_PanelSchedule")
+        
+    Returns:
+        Prompt template string appropriate for the drawing type
+    """
+    # Default to general prompt if no drawing type provided
+    if not drawing_type:
+        return GENERAL_PROMPT
+    
+    # Try to get prompt from registry first (preferred method)
+    registered_prompt = get_registered_prompt(drawing_type)
+    if registered_prompt:
+        return registered_prompt
+    
+    # Legacy fallback using dictionaries
+    # Parse drawing type to determine category and subtype
+    parts = drawing_type.split('_', 1)
+    main_type = parts[0]
+    
+    # If main type not recognized, return general prompt
+    if main_type not in PROMPT_CATEGORIES:
+        return GENERAL_PROMPT
+    
+    # Get prompt dictionary for this main type
+    prompt_dict = PROMPT_CATEGORIES[main_type]
+    
+    # Determine subtype (if any)
+    subtype = parts[1].upper() if len(parts) > 1 else "DEFAULT"
+    
+    # Return the specific subtype prompt if available, otherwise the default for this category
+    return prompt_dict.get(subtype, prompt_dict["DEFAULT"])
+
+def get_available_subtypes(main_type: Optional[str] = None) -> Dict[str, list]:
+    """
+    Get available subtypes for a main drawing type or all types.
+    
+    Args:
+        main_type: Optional main drawing type (e.g., "Architectural")
+        
+    Returns:
+        Dictionary of available subtypes by main type
+    """
+    if main_type and main_type in PROMPT_CATEGORIES:
+        # Return subtypes for specific main type
+        return {main_type: list(PROMPT_CATEGORIES[main_type].keys())}
+    
+    # Return all subtypes by main type
+    return {category: list(prompts.keys()) for category, prompts in PROMPT_CATEGORIES.items()}
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompt_types.py
+```py
+from enum import Enum, auto
+
+class DrawingCategory(Enum):
+    """Main drawing categories."""
+    ARCHITECTURAL = "Architectural"
+    ELECTRICAL = "Electrical"
+    MECHANICAL = "Mechanical"
+    PLUMBING = "Plumbing"
+    GENERAL = "General"
+    SPECIFICATIONS = "Specifications"
+
+class ArchitecturalSubtype(Enum):
+    """Architectural drawing subtypes."""
+    ROOM = "ROOM"
+    CEILING = "CEILING"
+    WALL = "WALL"
+    DOOR = "DOOR"
+    DETAIL = "DETAIL"
+    DEFAULT = "DEFAULT"
+
+class ElectricalSubtype(Enum):
+    """Electrical drawing subtypes."""
+    PANEL_SCHEDULE = "PANEL_SCHEDULE"
+    LIGHTING = "LIGHTING"
+    POWER = "POWER"
+    FIREALARM = "FIREALARM"
+    TECHNOLOGY = "TECHNOLOGY"
+    SPEC = "SPEC"
+    DEFAULT = "DEFAULT"
+
+class MechanicalSubtype(Enum):
+    """Mechanical drawing subtypes."""
+    EQUIPMENT = "EQUIPMENT"
+    VENTILATION = "VENTILATION"
+    PIPING = "PIPING"
+    DEFAULT = "DEFAULT"
+
+class PlumbingSubtype(Enum):
+    """Plumbing drawing subtypes."""
+    FIXTURE = "FIXTURE"
+    EQUIPMENT = "EQUIPMENT"
+    PIPE = "PIPE"
+    DEFAULT = "DEFAULT"
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/file_processor.py
+```py
+import os
+import json
+import logging
+import asyncio
+from tqdm.asyncio import tqdm
+from dotenv import load_dotenv
+from typing import Dict, Any, Optional
+
+from services.extraction_service import create_extractor, ExtractionResult
+from services.ai_service import (
+    process_drawing, 
+    optimize_model_parameters, 
+    DRAWING_INSTRUCTIONS, 
+    detect_drawing_subtype
+)
+from services.storage_service import FileSystemStorage
+from utils.performance_utils import time_operation
+from utils.constants import get_drawing_type
+from config.settings import USE_SIMPLIFIED_PROCESSING
+
+# Load environment variables
+load_dotenv()
+
+def is_panel_schedule(file_name: str, raw_content: str) -> bool:
+    """
+    Determine if a PDF is likely an electrical panel schedule
+    based solely on the file name (no numeric or content checks).
+    
+    Args:
+        file_name (str): Name of the PDF file
+        raw_content (str): (Unused) Extracted text content from the PDF
+        
+    Returns:
+        bool: True if the file name contains certain panel-schedule keywords
+    """
+    panel_keywords = [
+        "electrical panel schedule",
+        "panel schedule",
+        "panel schedules",
+        "power schedule",
+        "lighting schedule",
+        # Hyphenated versions:
+        "electrical-panel-schedule",
+        "panel-schedule",
+        "panel-schedules",
+        "power-schedule",
+        "lighting-schedule"
+    ]
+    file_name_lower = file_name.lower()
+    return any(keyword in file_name_lower for keyword in panel_keywords)
+
+@time_operation("total_processing")
+async def process_pdf_async(
+    pdf_path: str,
+    client,
+    output_folder: str,
+    drawing_type: str,
+    templates_created: Dict[str, bool]
+) -> Dict[str, Any]:
+    """
+    Process a single PDF asynchronously:
+    1) Extract text and tables from PDF
+    2) Detect drawing subtype 
+    3) Process with appropriate AI approach based on subtype
+    4) Save structured JSON output
+    """
+    file_name = os.path.basename(pdf_path)
+    logger = logging.getLogger(__name__)
+
+    with tqdm(total=100, desc=f"Processing {file_name}", leave=False) as pbar:
+        try:
+            pbar.update(10)
+            extractor = create_extractor(drawing_type, logger)
+            storage = FileSystemStorage(logger)
+
+            extraction_result = await extractor.extract(pdf_path)
+            if not extraction_result.success:
+                pbar.update(100)
+                logger.error(f"Extraction failed for {pdf_path}: {extraction_result.error}")
+                return {"success": False, "error": extraction_result.error, "file": pdf_path}
+
+            # Concatenate all extracted content without any truncation
+            raw_content = extraction_result.raw_text
+            for table in extraction_result.tables:
+                raw_content += f"\nTABLE:\n{table['content']}\n"
+                
+            # Detect drawing subtype based on drawing type and filename
+            subtype = detect_drawing_subtype(drawing_type, file_name)
+            logger.info(f"Detected drawing subtype: {subtype} for file {file_name}")
+
+            parsed_json = None
+            structured_json = None
+
+            # Process based on subtype
+            if drawing_type == "Specifications" or "SPECIFICATION" in file_name.upper():
+                # Specialized handling for specifications
+                logger.info(f"Using optimized specification processing for {file_name}")
+                
+                # Get optimized parameters
+                params = optimize_model_parameters("Specifications", raw_content, file_name)
+                
+                # Process with the specific system prompt for specifications
+                system_message = f"""
+                You are processing a SPECIFICATION document. Your only task is to extract the content into a structured JSON format.
+                
+                {DRAWING_INSTRUCTIONS.get('Specifications')}
+                
+                Return ONLY valid JSON. Do not include explanations, summaries, or any other text outside the JSON structure.
+                """
+                
+                # Process all content at once - no chunking
+                structured_json = await process_drawing(
+                    raw_content=raw_content,
+                    drawing_type="Specifications",
+                    client=client,
+                    file_name=file_name
+                )
+                
+                try:
+                    parsed_json = json.loads(structured_json)
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON error in specification {file_name}: {str(e)}")
+                    return handle_json_error(structured_json, pdf_path, drawing_type, output_folder, file_name, storage, pbar)
+                
+                pbar.update(40)
+                
+            elif "PanelSchedule" in subtype or ("Electrical" in drawing_type and "panel" in file_name.lower()):
+                # Import panel processor here to avoid circular imports
+                from processing.panel_schedule_processor import process_panel_schedule_content_async
+                
+                logger.info(f"Processing panel schedule {file_name}")
+                try:
+                    parsed_json = await process_panel_schedule_content_async(
+                        extraction_result=extraction_result,
+                        client=client,
+                        file_name=file_name
+                    )
+                    
+                    if parsed_json is None:
+                        logger.warning(f"Panel schedule processing returned no data for {file_name}")
+                        return {"success": False, "error": "Panel schedule processing failed to extract data", "file": pdf_path}
+                        
+                    pbar.update(40)
+                except Exception as e:
+                    logger.error(f"Error in panel schedule processing for {file_name}: {str(e)}")
+                    return {"success": False, "error": f"Panel schedule error: {str(e)}", "file": pdf_path}
+                
+            else:
+                # Standard processing for other documents
+                structured_json = await process_drawing(raw_content, drawing_type, client, file_name)
+                pbar.update(40)
+                
+                try:
+                    parsed_json = json.loads(structured_json)
+                except json.JSONDecodeError as e:
+                    return handle_json_error(structured_json, pdf_path, drawing_type, output_folder, file_name, storage, pbar)
+
+            # Unified saving logic - executed for all document types
+            if parsed_json:
+                type_folder = os.path.join(output_folder, drawing_type)
+                os.makedirs(type_folder, exist_ok=True)
+                
+                # Determine appropriate filename
+                base_name = os.path.splitext(file_name)[0]
+                suffix = "_panel_schedules.json" if "PanelSchedule" in subtype else "_structured.json"
+                output_filename = f"{base_name}{suffix}"
+                output_path = os.path.join(type_folder, output_filename)
+                
+                await storage.save_json(parsed_json, output_path)
+                pbar.update(20)
+                logger.info(f"Saved structured data to: {output_path}")
+
+                # Process architectural drawings for room templates if applicable
+                if drawing_type == 'Architectural' and 'rooms' in parsed_json:
+                    from templates.room_templates import process_architectural_drawing
+                    result = process_architectural_drawing(parsed_json, pdf_path, type_folder)
+                    templates_created['floor_plan'] = True
+                    logger.info(f"Created room templates: {result}")
+
+                pbar.update(10)
+                return {"success": True, "file": output_path}
+            else:
+                logger.error(f"No valid JSON produced for {file_name}")
+                return {"success": False, "error": "No valid JSON produced", "file": pdf_path}
+                
+        except Exception as e:
+            pbar.update(100)
+            logger.error(f"Error processing {pdf_path}: {str(e)}")
+            return {"success": False, "error": str(e), "file": pdf_path}
+
+
+def handle_json_error(structured_json, pdf_path, drawing_type, output_folder, file_name, storage, pbar):
+    """Helper function to handle JSON parse errors"""
+    logger = logging.getLogger(__name__)
+    pbar.update(100)
+    logger.error(f"JSON parse error for {pdf_path}")
+    
+    if structured_json:
+        logger.error(f"Raw API response: {structured_json[:500]}...")  # Log the first 500 chars
+        type_folder = os.path.join(output_folder, drawing_type)
+        os.makedirs(type_folder, exist_ok=True)
+        raw_output_path = os.path.join(type_folder, f"{os.path.splitext(file_name)[0]}_raw_response.json")
+        asyncio.create_task(storage.save_text(structured_json, raw_output_path))
+    
+    return {"success": False, "error": f"JSON parse failed", "file": pdf_path}
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/ai_service.py
+```py
+# File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/services/ai_service.py
+import json
+import logging
+from enum import Enum
+from typing import Dict, Any, Optional, TypeVar, Generic, List
+from openai import AsyncOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from utils.performance_utils import time_operation
+from dotenv import load_dotenv
+from templates.prompt_types import (
+    DrawingCategory,
+    ArchitecturalSubtype,
+    ElectricalSubtype,
+    MechanicalSubtype,
+    PlumbingSubtype
+)
+from templates.prompt_templates import get_prompt_template
+
+# Drawing type-specific instructions with main types and subtypes
+# (DRAWING_INSTRUCTIONS dictionary remains the same - keeping it for brevity)
+DRAWING_INSTRUCTIONS = {
+    # ... (Keep the existing dictionary content) ...
+    "Electrical": """
+    You are an electrical drawing expert extracting structured information. Focus on:
+    
+    1. All panel schedules - capture complete information about:
+       - Panel metadata (name, voltage, phases, rating, location)
+       - All circuits with numbers, trip sizes, poles, load descriptions
+       - Any panel notes or specifications
+    
+    2. All equipment schedules with:
+       - Complete electrical characteristics (voltage, phase, current ratings)
+       - Connection types and mounting specifications
+       - Part numbers and manufacturers when available
+    
+    3. Installation details:
+       - Circuit assignments and home run information
+       - Mounting heights and special requirements
+       - Keyed notes relevant to electrical items
+       
+    Structure all schedule information into consistent field names (e.g., use 'load_name' for descriptions, 
+    'circuit' for circuit numbers, 'trip' for breaker sizes).
+    
+    IMPORTANT: Ensure ALL circuits, equipment items, and notes are captured in your output. Missing information 
+    can cause installation errors.
+    """,
+    
+    "Mechanical": """
+    Extract ALL mechanical information with a simplified, comprehensive structure.
+
+1. Create a straightforward JSON structure with these main categories:
+   - "equipment": Object containing arrays of ALL mechanical equipment grouped by type
+   - "systems": Information about ductwork, piping, and distribution systems
+   - "notes": ALL notes, specifications, and requirements
+   - "remarks": ALL remarks and numbered references
+
+2. For ANY type of equipment (air handlers, fans, VAVs, pumps, etc.):
+   - Group by equipment type using descriptive keys (airHandlers, exhaustFans, chillers, etc.)
+   - Include EVERY specification field with its EXACT value - never round or approximate
+   - Use camelCase field names based on original headers
+   - Always include identification (tag/ID), manufacturer, model, and capacity information
+   - Capture ALL performance data (CFM, tonnage, BTU, static pressure, etc.)
+   - Include ALL electrical characteristics (voltage, phase, FLA, MCA, etc.)
+
+3. For ALL mechanical information:
+   - Preserve EXACT values - never round or approximate
+   - Include units of measurement
+   - Keep the structure flat and simple
+   - Don't skip ANY information shown on the drawing
+
+Example simplified structure:
+{
+  "equipment": {
+    "airHandlingUnits": [
+      {
+        "id": "AHU-1",
+        "manufacturer": "Trane",
+        "model": "M-Series",
+        "cfm": "10,000",
+        // ALL other fields exactly as shown
+      }
+    ],
+    "exhaustFans": [
+      // ALL fan data with EVERY field
+    ]
+  },
+  "notes": [
+    // ALL notes and specifications
+  ],
+  "remarks": [
+    // ALL remarks and references
+  ]
+}
+
+CRITICAL: Engineers need EVERY mechanical element and specification value EXACTLY as shown - complete accuracy is essential for proper system design, ordering, and installation.
+    """,
+    
+    "Plumbing": """
+    You are an expert AI assistant extracting detailed information from plumbing drawings, schedules, and notes. Your goal is to create a comprehensive and structured JSON output containing ALL relevant information presented.
+
+    Analyze the provided text, which may include various schedules (fixtures, water heaters, pumps, valves, etc.), legends, and general notes. Structure your response into a single JSON object with the following top-level keys:
+
+    1.  `metadata`: (Object) Capture any project identifiers, drawing numbers, titles, dates, or revisions found.
+    2.  `fixture_schedule`: (Array of Objects) Extract details for EVERY item listed in the main plumbing fixture schedule(s). Include items like sinks (S1, S2, S3, HS, MS), drains (FD, FS, HD), cleanouts (WCO, FCO, CO), lavatories (SW-05), urinals (SW-03), water closets (SW-01), trap guards (TG), shock arrestors (SA), backflow preventers (DCBP), etc. For each item, include:
+        - `fixture_id`: The exact mark or identifier (e.g., "S1", "SW-05", "WCO").
+        - `description`: The full description provided.
+        - `manufacturer`: Manufacturer name, if available.
+        - `model`: Model number, if available.
+        - `mounting`: Mounting details.
+        - `connections`: (Object) Use the 'Connection Schedule' table to populate waste, vent, cold water (CW), and hot water (HW) sizes where applicable.
+        - `notes`: Any specific notes related to this fixture.
+    3.  `water_heater_schedule`: (Array of Objects) Extract details for EACH water heater (e.g., WH-1, WH-2). Include:
+        - `mark`: The exact identifier (e.g., "WH-1").
+        - `location`: Installation location.
+        - `manufacturer`: Manufacturer name.
+        - `model`: Model number.
+        - `specifications`: (Object) Capture ALL technical specs like storage_gallons, operating_water_temp, tank_dimensions, recovery_rate, electric_power, kW_input, etc.
+        - `mounting`: Mounting details (e.g., "Floor mounted").
+        - `notes`: (Array of Strings) Capture ALL general notes associated specifically with the water heater schedule.
+    4.  `pump_schedule`: (Array of Objects) Extract details for EACH pump (e.g., CP). Include:
+        - `mark`: The exact identifier (e.g., "CP").
+        - `location`: Installation location.
+        - `serves`: What the pump serves.
+        - `type`: Pump type (e.g., "IN-LINE").
+        - `gpm`: Gallons Per Minute.
+        - `tdh_ft`: Total Dynamic Head (in feet).
+        - `hp`: Horsepower.
+        - `rpm`: Max RPM.
+        - `electrical`: Volts/Phase/Cycle.
+        - `manufacturer`: Manufacturer name.
+        - `model`: Model number.
+        - `notes`: Any remarks or specific notes.
+    5.  `mixing_valve_schedule`: (Array of Objects) Extract details for EACH thermostatic mixing valve (e.g., TM). Include:
+        - `designation`: Identifier (e.g., "TM").
+        - `location`: Service location.
+        - `inlet_temp_F`: Hot water inlet temperature.
+        - `outlet_temp_F`: Blended water temperature.
+        - `pressure_drop_psi`: Pressure drop.
+        - `manufacturer`: Manufacturer name.
+        - `model`: Model number.
+        - `notes`: Full description or notes.
+    6.  `shock_absorber_schedule`: (Array of Objects) Extract details for EACH shock arrestor size listed (e.g., SA-A, SA-B,... SA-F, plus the general SA). Include:
+        - `mark`: The exact identifier (e.g., "SA-A", "SA").
+        - `fixture_units`: Applicable fixture units range.
+        - `manufacturer`: Manufacturer name.
+        - `model`: Model number.
+        - `description`: Full description if provided separately.
+    7.  `material_legend`: (Object) Capture the pipe material specifications (e.g., "SANITARY SEWER PIPING": "CAST IRON OR SCHEDULE 40 PVC").
+    8.  `general_notes`: (Array of Strings) Extract ALL numbered or lettered general notes found in the text (like notes A-T).
+    9.  `insulation_notes`: (Array of Strings) Extract ALL notes specifically related to plumbing insulation (like notes A-F).
+    10. `symbols`: (Array of Objects, Optional) If needed, extract symbol descriptions.
+    11. `abbreviations`: (Array of Objects, Optional) If needed, extract abbreviation definitions.
+
+    CRITICAL:
+    - Capture ALL items listed in EVERY schedule table or list. Do not omit any fixtures, equipment, or sizes.
+    - Extract ALL general notes and insulation notes sections completely.
+    - Preserve the exact details, model numbers, specifications, and text provided.
+    - Ensure your entire response is a single, valid JSON object adhering to this structure. Missing information can lead to system failures or installation errors.
+    """,
+    
+    "Architectural": """
+    Extract and structure the following information with PRECISE detail:
+    
+    1. Room information:
+       Create a comprehensive 'rooms' array with objects for EACH room, including:
+       - 'number': Room number as string (EXACTLY as shown)
+       - 'name': Complete room name
+       - 'finish': All ceiling finishes
+       - 'height': Ceiling height (with units)
+       - 'electrical_info': Any electrical specifications
+       - 'architectural_info': Additional architectural details
+       - 'wall_types': Wall construction for each wall (north/south/east/west)
+    
+    2. Complete door and window schedules:
+       - Door/window numbers, types, sizes, and materials
+       - Hardware specifications and fire ratings
+       - Frame types and special requirements
+    
+    3. Wall type details:
+       - Create a 'wall_types' array with complete construction details
+       - Include ALL layers, thicknesses, and special requirements
+       - Document fire and sound ratings
+    
+    4. Architectural notes:
+       - Capture ALL general notes and keyed notes
+       - Include ALL finish schedule information
+       
+    CRITICAL: EVERY room must be captured. Missing rooms can cause major coordination issues.
+    For rooms with minimal information, include what's available and note any missing details.
+    """,
+    
+    "Specifications": """
+Extract specification content using a clean, direct structure.
+
+1. Create a straightforward 'specifications' array containing objects with:
+   - 'section_title': EXACT section number and title (e.g., "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS")
+   - 'content': COMPLETE text of the section with ALL parts and subsections
+   
+2. For the 'content' field:
+   - Preserve the EXACT text - no summarizing or paraphrasing
+   - Maintain ALL hierarchical structure (PART > SECTION > SUBSECTION)
+   - Keep ALL numbering and lettering (1.1, A., etc.)
+   - Include ALL paragraphs, tables, lists, and requirements
+
+3. DO NOT add interpretations, summaries, or analysis
+   - Your ONLY task is to preserve the original text in the correct sections
+   - The structure should be simple and flat (just title + content for each section)
+   - Handle each section as a complete unit
+
+Example structure:
+{
+  "specifications": [
+    {
+      "section_title": "SECTION 16050 - BASIC ELECTRICAL MATERIALS AND METHODS",
+      "content": "PART 1 - GENERAL\\n\\n1.1 RELATED DOCUMENTS\\n\\nA. DRAWINGS AND GENERAL PROVISIONS...\\n\\n[COMPLETE TEXT HERE]"
+    },
+    {
+      "section_title": "SECTION 16123 - BUILDING WIRE AND CABLE",
+      "content": "PART 1 GENERAL\\n\\n1.01 SECTION INCLUDES\\n\\nA. WIRE AND CABLE...\\n\\n[COMPLETE TEXT HERE]"
+    }
+  ]
+}
+
+CRITICAL: Construction decisions rely on complete, unaltered specifications. Even minor omissions or changes can cause legal and safety issues.
+    """,
+    
+    "General": """
+    Extract ALL relevant content and organize into a comprehensive, structured JSON:
+    
+    1. Identify the document type and organize data accordingly:
+       - For schedules: Create arrays of consistently structured objects
+       - For specifications: Preserve the complete text with hierarchical structure
+       - For drawings: Document all annotations, dimensions, and references
+    
+    2. Capture EVERY piece of information:
+       - Include ALL notes, annotations, and references
+       - Document ALL equipment, fixtures, and components
+       - Preserve ALL technical specifications and requirements
+    
+    3. Maintain relationships between elements:
+       - Link components to their locations (rooms, areas)
+       - Connect items to their technical specifications
+       - Reference related notes and details
+    
+    Structure everything into a clear, consistent JSON format that preserves ALL the original information.
+    """,
+    
+    # Electrical subtypes
+    "Electrical_PanelSchedule": """
+    You are an expert electrical engineer analyzing panel schedules. Your goal is to produce a precisely structured JSON representation with COMPLETE information.
+    
+    Extract and structure the following information with PERFECT accuracy:
+    
+    1. Panel metadata (create a 'panel' object):
+       - 'name': Panel name/ID (EXACTLY as written)
+       - 'location': Physical location of panel
+       - 'voltage': Full voltage specification (e.g., "120/208V Wye", "277/480V")
+       - 'phases': Number of phases (1 or 3) and wires (e.g., "3 Phase 4 Wire")
+       - 'amperage': Main amperage rating
+       - 'main_breaker': Main breaker size if present
+       - 'aic_rating': AIC/interrupting rating
+       - 'feed': Source information (fed from)
+       - Any additional metadata present (enclosure type, mounting, etc.)
+       
+    2. Circuit information (create a 'circuits' array with objects for EACH circuit):
+       - 'circuit': Circuit number or range EXACTLY as shown (e.g., "1", "2-4-6", "3-5")
+       - 'trip': Breaker/trip size with units (e.g., "20A", "70 A")
+       - 'poles': Number of poles (1, 2, or 3)
+       - 'load_name': Complete description of the connected load
+       - 'equipment_ref': Reference to equipment ID if available
+       - 'room_id': Connected room(s) if specified
+       - Any additional circuit information present
+       
+    3. Additional information:
+       - 'panel_totals': Connected load, demand factors, and calculated loads
+       - 'notes': Any notes specific to the panel
+       
+    CRITICAL: EVERY circuit must be documented EXACTLY as shown on the schedule. Missing circuits, incorrect numbering, or incomplete information can cause dangerous installation errors.
+    """,
+    
+    "Electrical_Lighting": """
+    You are extracting complete lighting fixture and control information.
+    
+    1. Create a comprehensive 'lighting_fixtures' array with details for EACH fixture:
+       - 'type_mark': Fixture type designation (EXACTLY as shown)
+       - 'description': Complete fixture description
+       - 'manufacturer': Manufacturer name
+       - 'product_number': Model or catalog number
+       - 'lamp_type': Complete lamp specification (e.g., "LED, 35W, 3500K")
+       - 'mounting': Mounting type and height
+       - 'voltage': Operating voltage
+       - 'wattage': Power consumption
+       - 'dimensions': Complete fixture dimensions
+       - 'count': Quantity of fixtures when specified
+       - 'location': Installation locations
+       - 'dimmable': Dimming capability and type
+       - 'remarks': Any special notes or requirements
+       
+    2. Document all lighting controls with specific details:
+       - Switch types and functions
+       - Sensors (occupancy, vacancy, daylight)
+       - Dimming systems and protocols
+       - Control zones and relationships
+       
+    3. Document circuit assignments:
+       - Panel and circuit numbers
+       - Connected areas and zones
+       - Load calculations
+       
+    IMPORTANT: Capture EVERY fixture type and ALL specifications. Missing or incorrect information
+    can lead to incompatible installations and lighting failure.
+    """,
+    
+    "Electrical_Power": """
+    Extract ALL power distribution and equipment connection information with complete detail:
+    
+    1. Document all outlets and receptacles in an organized array:
+       - Type (standard, GFCI, special purpose, isolated ground)
+       - Voltage and amperage ratings
+       - Mounting height and orientation
+       - Circuit assignment (panel and circuit number)
+       - Room location and mounting surface
+       - NEMA configuration
+       
+    2. Create a structured array of equipment connections:
+       - Equipment type and designation
+       - Power requirements (voltage, phase, amperage)
+       - Connection method (hardwired, cord-and-plug)
+       - Circuit assignment
+       - Disconnecting means
+       
+    3. Detail specialized power systems:
+       - UPS connections and specifications
+       - Emergency or standby power
+       - Isolated power systems
+       - Specialty voltage requirements
+       
+    4. Document all keyed notes related to power:
+       - Special installation requirements
+       - Code compliance notes
+       - Coordination requirements
+       
+    IMPORTANT: ALL power elements must be captured with their EXACT specifications.
+    Electrical inspectors will verify these details during installation.
+    """,
+    
+    "Electrical_FireAlarm": """
+    Extract complete fire alarm system information with precise detail:
+    
+    1. Document ALL devices in a structured array:
+       - Device type (smoke detector, heat detector, pull station, etc.)
+       - Model number and manufacturer
+       - Mounting height and location
+       - Zone/circuit assignment
+       - Addressable or conventional designation
+       
+    2. Identify all control equipment:
+       - Fire alarm control panel specifications
+       - Power supplies and battery calculations
+       - Remote annunciators
+       - Auxiliary control functions
+       
+    3. Capture ALL wiring specifications:
+       - Circuit types (initiating, notification, signaling)
+       - Wire types, sizes, and ratings
+       - Survivability requirements
+       
+    4. Document interface requirements:
+       - Sprinkler system monitoring
+       - Elevator recall functions
+       - HVAC shutdown
+       - Door holder/closer release
+       
+    CRITICAL: Fire alarm systems are life-safety systems subject to strict code enforcement.
+    ALL components and functions must be documented exactly as specified to ensure proper operation.
+    """,
+    
+    "Electrical_Technology": """
+    Extract ALL low voltage systems information with complete technical detail:
+    
+    1. Document data/telecom infrastructure in structured arrays:
+       - Outlet types and locations
+       - Cable specifications (category, shielding)
+       - Mounting heights and orientations
+       - Pathway types and sizes
+       - Equipment rooms, racks, and cabinets
+       
+    2. Identify security systems with specific details:
+       - Camera types, models, and coverage areas
+       - Access control devices and door hardware
+       - Intrusion detection sensors and zones
+       - Control equipment and monitoring requirements
+       
+    3. Document audiovisual systems:
+       - Display types, sizes, and mounting details
+       - Audio equipment and speaker layout
+       - Control systems and interfaces
+       - Signal routing and processing
+       
+    4. Capture specialty systems:
+       - Nurse call or emergency communication
+       - Distributed antenna systems (DAS)
+       - Paging and intercom
+       - Radio and wireless systems
+       
+    IMPORTANT: Technology systems require precise documentation to ensure proper integration.
+    ALL components, connections, and configurations must be captured as specified.
+    """,
+    
+    # Architectural subtypes
+    "Architectural_FloorPlan": """
+    Extract COMPLETE floor plan information with precise room-by-room detail:
+    
+    1. Create a comprehensive 'rooms' array with objects for EACH room, capturing:
+       - 'number': Room number EXACTLY as shown (including prefixes/suffixes)
+       - 'name': Complete room name
+       - 'dimensions': Length, width, and area when available
+       - 'adjacent_rooms': List of connecting room numbers
+       - 'wall_types': Wall construction for each room boundary (north/south/east/west)
+       - 'door_numbers': Door numbers providing access to the room
+       - 'window_numbers': Window numbers in the room
+       
+    2. Document circulation paths with specific details:
+       - Corridor widths and clearances
+       - Stair dimensions and configurations
+       - Elevator locations and sizes
+       - Exit paths and egress requirements
+       
+    3. Identify area designations and zoning:
+       - Fire-rated separations and occupancy boundaries
+       - Smoke compartments
+       - Security zones
+       - Department or functional areas
+       
+    CRITICAL: EVERY room must be documented with ALL available information.
+    Missing rooms or incomplete details can cause serious coordination issues across all disciplines.
+    When room information is unclear or incomplete, note this in the output.
+    """,
+    
+    "Architectural_ReflectedCeiling": """
+    Extract ALL ceiling information with complete room-by-room detail:
+    
+    1. Create a comprehensive 'rooms' array with ceiling-specific objects for EACH room:
+       - 'number': Room number EXACTLY as shown
+       - 'name': Complete room name
+       - 'ceiling_type': Material and system (e.g., "2x2 ACT", "GWB")
+       - 'ceiling_height': Height above finished floor (with units)
+       - 'soffit_heights': Heights of any soffits or bulkheads
+       - 'slope': Ceiling slope information if applicable
+       - 'fixtures': Array of ceiling-mounted elements (lights, diffusers, sprinklers)
+       
+    2. Document ceiling transitions with specific details:
+       - Height changes between areas
+       - Bulkhead and soffit dimensions
+       - Special ceiling features (clouds, islands)
+       
+    3. Identify ceiling-mounted elements:
+       - Lighting fixtures (coordinated with electrical)
+       - HVAC diffusers and registers
+       - Sprinkler heads and fire alarm devices
+       - Specialty items (projector mounts, speakers)
+       
+    IMPORTANT: Ceiling coordination is critical for clash detection.
+    EVERY room must have complete ceiling information to prevent conflicts with mechanical, 
+    electrical, and plumbing systems during installation.
+    """,
+    
+    "Architectural_Partition": """
+    Extract ALL wall and partition information with precise construction details:
+    
+    1. Create a comprehensive 'wall_types' array with objects for EACH type:
+       - 'type': Wall type designation EXACTLY as shown
+       - 'description': Complete description of the wall assembly
+       - 'details': Object containing:
+         - 'stud_type': Material and thickness (steel, wood)
+         - 'stud_width': Dimension with units
+         - 'stud_spacing': Spacing with units
+         - 'layers': Complete description of all layers from exterior to interior
+         - 'insulation': Type and R-value
+         - 'total_thickness': Overall dimension with units
+       - 'fire_rating': Fire resistance rating with duration
+       - 'sound_rating': STC or other acoustic rating
+       - 'height': Height designation ("to deck", "above ceiling")
+       
+    2. Document room-to-wall type relationships:
+       - For each room, identify wall types used on each boundary (north/south/east/west)
+       - Note any special conditions or variations
+       
+    3. Identify special wall conditions:
+       - Seismic considerations
+       - Expansion/control joints
+       - Bracing requirements
+       - Wall transitions
+       
+    CRITICAL: Wall type details impact all disciplines (architectural, structural, mechanical, electrical).
+    EVERY wall type must be fully documented with ALL construction details to ensure proper installation.
+    """,
+    
+    "Architectural_Details": """
+    Extract ALL architectural details with complete construction information:
+    
+    1. Document each architectural detail:
+       - Detail number and reference
+       - Complete description of the assembly
+       - Materials and dimensions
+       - Connection methods and fastening
+       - Finish requirements
+       
+    2. Capture specific assembly information:
+       - Waterproofing and flashing details
+       - Thermal and moisture protection
+       - Acoustic treatments
+       - Fire and smoke barriers
+       
+    3. Document all annotations and notes:
+       - Construction requirements
+       - Installation sequence
+       - Quality standards
+       - Reference standards
+       
+    IMPORTANT: Architectural details provide critical information for proper construction.
+    ALL detail information must be captured exactly as specified to ensure code compliance
+    and proper installation.
+    """,
+    
+    "Architectural_Schedules": """
+    Extract ALL architectural schedules with complete information for each element:
+    
+    1. Door schedules with comprehensive detail:
+       - Door number EXACTLY as shown
+       - Type, size (width, height, thickness)
+       - Material and finish
+       - Fire rating and label requirements
+       - Frame type and material
+       - Hardware sets and special requirements
+       
+    2. Window schedules with specific details:
+       - Window number and type
+       - Dimensions and configuration
+       - Glazing type and performance ratings
+       - Frame material and finish
+       - Operating requirements
+       
+    3. Room finish schedules:
+       - Room number and name
+       - Floor, base, wall, and ceiling finishes
+       - Special treatments or requirements
+       - Finish transitions
+       
+    4. Accessory and equipment schedules:
+       - Item designations and types
+       - Mounting heights and locations
+       - Material and finish specifications
+       - Quantities and installation notes
+       
+    CRITICAL: Schedule information is used by multiple trades and disciplines.
+    EVERY scheduled item must be completely documented with ALL specifications to ensure
+    proper procurement and installation.
+    """
+}
+
+def detect_drawing_subtype(drawing_type: str, file_name: str) -> str:
+    """
+    Detect more specific drawing subtype based on drawing type and filename.
+
+    Args:
+        drawing_type: Main drawing type (Electrical, Architectural, etc.)
+        file_name: Name of the file being processed
+
+    Returns:
+        More specific subtype or the original drawing type if no subtype detected
+    """
+    if not file_name or not drawing_type:
+        return drawing_type
+
+    file_name_lower = file_name.lower()
+
+    # Enhanced specification detection - check this first for efficiency
+    if "specification" in drawing_type.lower() or any(term in file_name_lower for term in
+                                                       ["spec", "specification", ".spec", "e0.01"]):
+        return DrawingCategory.SPECIFICATIONS.value
+
+    # Electrical subtypes
+    if drawing_type == DrawingCategory.ELECTRICAL.value:
+        # Panel schedules
+        if any(term in file_name_lower for term in ["panel", "schedule", "panelboard", "circuit", "h1", "l1", "k1", "k1s", "21lp-1", "20h-1"]):
+            return f"{drawing_type}_{ElectricalSubtype.PANEL_SCHEDULE.value}"
+        # Lighting fixtures and controls
+        elif any(term in file_name_lower for term in ["light", "lighting", "fixture", "lamp", "luminaire", "rcp", "ceiling"]):
+            return f"{drawing_type}_{ElectricalSubtype.LIGHTING.value}"
+        # Power distribution
+        elif any(term in file_name_lower for term in ["power", "outlet", "receptacle", "equipment", "connect", "riser", "metering"]):
+            return f"{drawing_type}_{ElectricalSubtype.POWER.value}"
+        # Fire alarm systems
+        elif any(term in file_name_lower for term in ["fire", "alarm", "fa", "detection", "smoke", "emergency", "evacuation"]):
+            return f"{drawing_type}_{ElectricalSubtype.FIREALARM.value}"
+        # Low voltage systems
+        elif any(term in file_name_lower for term in ["tech", "data", "comm", "security", "av", "low voltage", "telecom", "network"]):
+            return f"{drawing_type}_{ElectricalSubtype.TECHNOLOGY.value}"
+        # Specifications (if not caught earlier)
+        elif any(term in file_name_lower for term in ["spec", "specification", "requirement"]):
+             return DrawingCategory.SPECIFICATIONS.value # Map directly to main spec type
+
+    # Architectural subtypes
+    elif drawing_type == DrawingCategory.ARCHITECTURAL.value:
+        # Reflected ceiling plans
+        if any(term in file_name_lower for term in ["rcp", "ceiling", "reflected"]):
+            return f"{drawing_type}_{ArchitecturalSubtype.CEILING.value}"
+        # Wall types and partitions
+        elif any(term in file_name_lower for term in ["partition", "wall type", "wall-type", "wall", "room wall"]):
+            return f"{drawing_type}_{ArchitecturalSubtype.WALL.value}"
+        # Floor plans
+        elif any(term in file_name_lower for term in ["floor", "plan", "layout", "room"]):
+            return f"{drawing_type}_{ArchitecturalSubtype.ROOM.value}"
+        # Door and window schedules
+        elif any(term in file_name_lower for term in ["door", "window", "hardware", "schedule"]):
+            return f"{drawing_type}_{ArchitecturalSubtype.DOOR.value}"
+        # Architectural details
+        elif any(term in file_name_lower for term in ["detail", "section", "elevation", "assembly"]):
+            return f"{drawing_type}_{ArchitecturalSubtype.DETAIL.value}"
+
+    # Mechanical subtypes
+    elif drawing_type == DrawingCategory.MECHANICAL.value:
+        # Equipment schedules
+        if any(term in file_name_lower for term in ["equip", "unit", "ahu", "rtu", "vav", "schedule"]):
+            return f"{drawing_type}_{MechanicalSubtype.EQUIPMENT.value}"
+        # Ventilation systems
+        elif any(term in file_name_lower for term in ["vent", "air", "supply", "return", "diffuser", "grille"]):
+            return f"{drawing_type}_{MechanicalSubtype.VENTILATION.value}"
+        # Piping systems
+        elif any(term in file_name_lower for term in ["pipe", "chilled", "heating", "cooling", "refrigerant"]):
+            return f"{drawing_type}_{MechanicalSubtype.PIPING.value}"
+
+    # Plumbing subtypes
+    elif drawing_type == DrawingCategory.PLUMBING.value:
+        # Fixture schedules
+        if any(term in file_name_lower for term in ["fixture", "sink", "toilet", "shower", "schedule"]):
+            return f"{drawing_type}_{PlumbingSubtype.FIXTURE.value}"
+        # Equipment
+        elif any(term in file_name_lower for term in ["equip", "heater", "pump", "water", "schedule"]):
+            return f"{drawing_type}_{PlumbingSubtype.EQUIPMENT.value}"
+        # Piping systems
+        elif any(term in file_name_lower for term in ["pipe", "riser", "water", "sanitary", "vent"]):
+            return f"{drawing_type}_{PlumbingSubtype.PIPE.value}"
+
+    # If no subtype detected, return the main type
+    return drawing_type
+
+class ModelType(Enum):
+    """Enumeration of supported AI model types."""
+    GPT_4O_MINI = "gpt-4o-mini"
+    GPT_4O = "gpt-4o"
+
+def optimize_model_parameters(
+    drawing_type: str,
+    raw_content: str,
+    file_name: str
+) -> Dict[str, Any]:
+    """
+    Determine optimal model parameters based on drawing type and content.
+
+    Args:
+        drawing_type: Type of drawing (Architectural, Electrical, etc.)
+        raw_content: Raw content from the drawing
+        file_name: Name of the file being processed
+
+    Returns:
+        Dictionary of optimized parameters
+    """
+    from dotenv import load_dotenv
+    load_dotenv(override=True) # Reload to ensure we get the latest env values
+
+    from config.settings import get_force_mini_model # Import the function instead
+
+    content_length = len(raw_content)
+
+    # Default parameters
+    params = {
+        "model_type": ModelType.GPT_4O_MINI,
+        "temperature": 0.1, # Reduced default temperature for more consistent output
+        "max_tokens": 16000, # Default max tokens for mini model
+    }
+
+    # Determine the appropriate model based on FORCE_MINI_MODEL flag and content length/type
+    use_mini_model = get_force_mini_model()
+    use_large_model = False
+
+    # Conditions to potentially upgrade to the larger model (GPT-4O)
+    if not use_mini_model:
+        if content_length > 50000 or "specification" in drawing_type.lower():
+            use_large_model = True
+            logging.info(f"Content length ({content_length}) or type ({drawing_type}) suggests using GPT-4o for {file_name}")
+        elif ("Electrical" in drawing_type and "PanelSchedule" in drawing_type and content_length > 15000):
+             use_large_model = True
+             logging.info(f"Complex panel schedule ({content_length}) suggests using GPT-4o for {file_name}")
+        elif ("Architectural" in drawing_type and content_length > 20000):
+             use_large_model = True
+             logging.info(f"Large architectural drawing ({content_length}) suggests using GPT-4o for {file_name}")
+        elif ("Mechanical" in drawing_type and content_length > 20000):
+             use_large_model = True
+             logging.info(f"Large mechanical drawing ({content_length}) suggests using GPT-4o for {file_name}")
+
+    # Set the model type
+    if use_large_model:
+        params["model_type"] = ModelType.GPT_4O
+        # Adjust max_tokens for the larger model
+        estimated_input_tokens = min(128000, len(raw_content) // 4) # Cap at 128k tokens maximum
+        # Reserve tokens for output, adjust based on model context window (approx 128k input, 4k output generally safe)
+        params["max_tokens"] = max(4096, min(16000, 128000 - estimated_input_tokens - 1000)) # Ensure at least 4k, max 16k, within context
+    elif use_mini_model:
+         logging.info(f"Forcing gpt-4o-mini model for testing: {file_name}")
+         # Keep default params["model_type"] = ModelType.GPT_4O_MINI
+         # Keep default params["max_tokens"] = 16000
+
+    # Adjust temperature based on drawing type
+    if "Electrical" in drawing_type:
+        # Panel schedules need lowest temperature for precision
+        if "PanelSchedule" in drawing_type:
+            params["temperature"] = 0.05
+        # Other electrical drawings need precision too
+        else:
+            params["temperature"] = 0.1
+    elif "Architectural" in drawing_type:
+         # Requires precision but might need some inference for relationships
+         params["temperature"] = 0.1
+    elif "Mechanical" in drawing_type:
+         # Slightly higher temperature might help with varied schedule formats
+         params["temperature"] = 0.2 # Reduced from 0.3 for better consistency
+    elif "Specification" in drawing_type:
+        # Needs precision, very low temperature
+        params["temperature"] = 0.05
+
+    # Safety check: ensure max_tokens is within reasonable limits for the chosen model
+    if params["model_type"] == ModelType.GPT_4O_MINI:
+        params["max_tokens"] = min(params["max_tokens"], 16000) # Hard cap for mini
+    elif params["model_type"] == ModelType.GPT_4O:
+         # Let the calculated value stand, but ensure it doesn't exceed common practical limits like 16k unless necessary
+         params["max_tokens"] = min(params["max_tokens"], 16000) # Re-cap at 16k for safety/cost unless specifically needed higher
+
+
+    logging.info(f"Using model {params['model_type'].value} with temperature {params['temperature']} and max_tokens {params['max_tokens']} for {file_name}")
+
+    return params
+
+
+T = TypeVar('T')
+
+class AiRequest:
+    """
+    Class to hold AI API request parameters.
+    """
+    def __init__(
+        self,
+        content: str,
+        model_type: 'ModelType' = None,
+        temperature: float = 0.2,
+        max_tokens: int = 3000,
+        system_message: str = ""
+    ):
+        """
+        Initialize an AiRequest.
+
+        Args:
+            content: Content to send to the API
+            model_type: Model type to use
+            temperature: Temperature parameter
+            max_tokens: Maximum tokens to generate
+            system_message: System message to use
+        """
+        self.content = content
+        self.model_type = model_type
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.system_message = system_message
+
+class AiResponse(Generic[T]):
+    """
+    Generic class to hold AI API response data or errors.
+    """
+    def __init__(self, success: bool = True, content: str = "", parsed_content: Optional[T] = None, error: str = ""):
+        """
+        Initialize an AiResponse.
+
+        Args:
+            success: Whether the API call was successful
+            content: Raw content from the API
+            parsed_content: Optional parsed content (of generic type T)
+            error: Error message if the call failed
+        """
+        self.success = success
+        self.content = content
+        self.parsed_content = parsed_content
+        self.error = error
+
+class DrawingAiService:
+    """
+    Specialized AI service for processing construction drawings.
+    """
+    def __init__(self, client: AsyncOpenAI, drawing_instructions: Dict[str, str] = None, logger: Optional[logging.Logger] = None):
+        """
+        Initialize the DrawingAiService.
+
+        Args:
+            client: AsyncOpenAI client instance
+            drawing_instructions: Optional dictionary of drawing type-specific instructions
+            logger: Optional logger instance
+        """
+        self.client = client
+        self.drawing_instructions = drawing_instructions or DRAWING_INSTRUCTIONS
+        self.logger = logger or logging.getLogger(__name__)
+
+    def _get_default_system_message(self, drawing_type: str) -> str:
+        """
+        Get the default system message for the given drawing type using the prompt templates.
+
+        Args:
+            drawing_type: Type of drawing (Architectural, Electrical, etc.) or subtype
+
+        Returns:
+            System message string
+        """
+        # Use the prompt template module to get the appropriate template
+        return get_prompt_template(drawing_type)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(Exception)
+    )
+    @time_operation("ai_processing")
+    async def process(self, request: AiRequest) -> AiResponse[Dict[str, Any]]:
+        """
+        Process an AI request. (Used by panel schedule processor primarily)
+
+        Args:
+            request: AiRequest object containing parameters
+
+        Returns:
+            AiResponse with parsed content or error
+        """
+        try:
+            self.logger.info(f"Processing content of length {len(request.content)} using model {request.model_type.value}")
+
+            response = await self.client.chat.completions.create(
+                model=request.model_type.value,
+                messages=[
+                    {"role": "system", "content": request.system_message},
+                    {"role": "user", "content": request.content}
+                ],
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                response_format={"type": "json_object"} # Ensure JSON response
+            )
+
+            content = response.choices[0].message.content
+
+            try:
+                parsed_content = json.loads(content)
+                return AiResponse(success=True, content=content, parsed_content=parsed_content)
+            except json.JSONDecodeError as e:
+                self.logger.error(f"JSON decoding error: {str(e)}")
+                self.logger.error(f"Raw content received: {content[:500]}...") # Log the first 500 chars for debugging
+                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}", content=content) # Return raw content on error
+        except Exception as e:
+            self.logger.error(f"Error during AI processing: {str(e)}")
+            return AiResponse(success=False, error=str(e))
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(Exception)
+    )
+    @time_operation("ai_processing")
+    async def process_drawing_with_responses(
+        self,
+        raw_content: str,
+        drawing_type: str,
+        temperature: float = 0.2,
+        max_tokens: int = 16000,
+        model_type: ModelType = ModelType.GPT_4O_MINI,
+        system_message: Optional[str] = None,
+    ) -> AiResponse:
+        """
+        Process a drawing using the OpenAI API, returning an AiResponse.
+        (Removed few-shot example logic)
+
+        Args:
+            raw_content: Complete raw content from the drawing - NO TRUNCATION
+            drawing_type: Type of drawing
+            temperature: Temperature parameter
+            max_tokens: Maximum tokens to generate
+            model_type: Model type to use
+            system_message: Optional system message
+
+        Returns:
+            AiResponse with parsed content or error
+        """
+        try:
+            self.logger.info(f"Processing {drawing_type} drawing with {len(raw_content)} characters using model {model_type.value}")
+
+            messages = [
+                {"role": "system", "content": system_message or self._get_default_system_message(drawing_type)},
+                {"role": "user", "content": raw_content}
+            ]
+
+            response = await self.client.chat.completions.create(
+                model=model_type.value,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"} # Ensure JSON response
+            )
+
+            content = response.choices[0].message.content
+
+            try:
+                parsed_content = json.loads(content)
+                return AiResponse(success=True, content=content, parsed_content=parsed_content)
+            except json.JSONDecodeError as e:
+                self.logger.error(f"JSON decoding error: {str(e)}")
+                self.logger.error(f"Raw content received: {content[:500]}...") # Log the first 500 chars for debugging
+                return AiResponse(success=False, error=f"JSON decoding error: {str(e)}", content=content) # Return raw content on error
+        except Exception as e:
+            self.logger.error(f"Error processing drawing: {str(e)}")
+            return AiResponse(success=False, error=str(e))
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type(Exception)
+    )
+    @time_operation("ai_processing")
+    async def process_with_prompt(
+        self,
+        raw_content: str,
+        temperature: float = 0.2,
+        max_tokens: int = 16000,
+        model_type: ModelType = ModelType.GPT_4O_MINI,
+        system_message: Optional[str] = None,
+    ) -> str:
+        """
+        Process raw content using a specific prompt, ensuring full content is sent to the API.
+        Returns the raw JSON string response.
+        (Removed few-shot example logic)
+
+        Args:
+            raw_content: Raw content from the drawing
+            temperature: Temperature parameter for the AI model
+            max_tokens: Maximum tokens to generate
+            model_type: AI model type to use
+            system_message: Optional custom system message to override default
+
+        Returns:
+            Processed content as a JSON string
+
+        Raises:
+            JSONDecodeError: If the response is not valid JSON
+            ValueError: If the JSON structure is invalid or context length exceeded
+            Exception: For other processing errors
+        """
+        default_system_message = """
+        You are an AI assistant specialized in construction drawings. Extract all relevant information from the provided content and organize it into a structured JSON object with these sections:
+
+        - "metadata": An object containing drawing metadata such as "drawing_number", "title", "date", and "revision".
+        Include any available information; if a field is missing, omit it.
+
+        - "schedules": An array of schedule objects. Each schedule should have a "type" (e.g., "electrical_panel",
+        "mechanical") and a "data" array containing objects with standardized field names. For panel schedules,
+        use consistent field names like "circuit" for circuit numbers, "trip" for breaker sizes,
+        "load_name" for equipment descriptions, and "poles" for the number of poles.
+
+        - "notes": An array of strings containing any notes or instructions found in the drawing.
+
+        - "specifications": An array of objects, each with a "section_title" and "content" for specification sections.
+
+        - "rooms": For architectural drawings, include an array of rooms with 'number', 'name', 'finish', 'height',
+        'electrical_info', and 'architectural_info'.
+
+        CRITICAL REQUIREMENTS:
+        1. The JSON output MUST include ALL information from the drawing - nothing should be omitted
+        2. Structure data consistently with descriptive field names
+        3. Panel schedules MUST include EVERY circuit, with correct circuit numbers, trip sizes, and descriptions
+        4. For architectural drawings, ALWAYS include a 'rooms' array with ALL rooms
+        5. For specifications, preserve the COMPLETE text in the 'content' field
+        6. Ensure the output is valid JSON with no syntax errors
+
+        Construction decisions will be based on this data, so accuracy and completeness are essential.
+        """
+
+        # Use the provided system message or fall back to default
+        final_system_message = system_message if system_message else default_system_message
+
+        content_length = len(raw_content)
+        self.logger.info(f"Processing content of length {content_length} with model {model_type.value}")
+
+        # Context length warnings (remain relevant)
+        if content_length > 250000 and model_type == ModelType.GPT_4O_MINI:
+            self.logger.warning(f"Content length ({content_length} chars) is large for GPT-4o-mini context window. Consider upgrading model if issues occur.")
+        if content_length > 500000 and model_type == ModelType.GPT_4O:
+             self.logger.warning(f"Content length ({content_length} chars) is very large, approaching GPT-4o context window limits. Processing may be incomplete.")
+
+
+        try:
+            messages = [
+                {"role": "system", "content": final_system_message},
+                {"role": "user", "content": raw_content}
+            ]
+
+            # Calculate rough token estimate for logging
+            estimated_tokens = content_length // 4
+            self.logger.info(f"Estimated input tokens: ~{estimated_tokens}")
+
+            try:
+                response = await self.client.chat.completions.create(
+                    model=model_type.value,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format={"type": "json_object"} # Ensure JSON response
+                )
+                content = response.choices[0].message.content
+
+                # Process usage information if available
+                if hasattr(response, 'usage') and response.usage:
+                    self.logger.info(f"Token usage - Input: {response.usage.prompt_tokens}, Output: {response.usage.completion_tokens}, Total: {response.usage.total_tokens}")
+
+                try:
+                    # Validate JSON parsing immediately
+                    parsed_content = json.loads(content)
+                    if not self.validate_json(parsed_content):
+                         self.logger.warning("JSON validation failed - missing required keys")
+                         # Still return the content, as it might be usable even with missing keys
+
+                    return content
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"JSON decoding error: {str(e)}")
+                    self.logger.error(f"Raw content received: {content[:500]}...") # Log the first 500 chars for debugging
+                    raise # Re-raise the JSONDecodeError
+
+            except Exception as e:
+                if "maximum context length" in str(e).lower() or "token limit" in str(e).lower():
+                    self.logger.error(f"Context length exceeded: {str(e)}")
+                    raise ValueError(f"Content too large for model context window: {str(e)}")
+                else:
+                    self.logger.error(f"API error: {str(e)}")
+                    raise # Re-raise other API errors
+
+        except Exception as e:
+            self.logger.error(f"Error preparing or initiating AI processing: {str(e)}")
+            raise # Re-raise any other unexpected errors
+
+    def validate_json(self, json_data: Dict[str, Any]) -> bool:
+        """
+        Validate the JSON structure.
+
+        Args:
+            json_data: Parsed JSON data
+
+        Returns:
+            True if the JSON has all required keys, False otherwise
+        """
+        # Basic validation - check for required top-level keys
+        # Allow flexibility, just log warnings if keys are missing for now
+        required_keys = ["metadata", "schedules", "notes"]
+        missing_keys = [key for key in required_keys if key not in json_data]
+        if missing_keys:
+            self.logger.warning(f"JSON response missing expected keys: {', '.join(missing_keys)}")
+            # Return True for now, but logging helps identify inconsistent outputs.
+            # Could return False here if strict validation is needed later.
+
+        # Specifications validation - check structure and convert if needed
+        if "specifications" in json_data:
+            specs = json_data["specifications"]
+            if isinstance(specs, list) and specs:
+                # Convert string arrays to object arrays if needed
+                if isinstance(specs[0], str):
+                    self.logger.warning("Converting specifications from string array to object array")
+                    json_data["specifications"] = [{"section_title": spec, "content": ""} for spec in specs]
+        # No else needed - if 'specifications' isn't there or is empty, that's okay
+
+        # For architectural drawings, log if rooms array is missing
+        if isinstance(json_data.get("metadata"), dict) and \
+           "architectural" in json_data["metadata"].get("drawing_type", "").lower() and \
+           "rooms" not in json_data:
+            self.logger.warning("Architectural drawing missing 'rooms' array in JSON response")
+            # Again, return True for now, but log the issue.
+
+        return True # Return True unless strict validation requires False on warnings
+
+# --- REMOVED get_example_output function ---
+
+@time_operation("ai_processing")
+async def process_drawing(raw_content: str, drawing_type: str, client, file_name: str = "") -> str:
+    """
+    Use GPT to parse PDF text and table data into structured JSON based on the drawing type.
+    (Removed few-shot example logic)
+
+    Args:
+        raw_content: Raw content from the drawing
+        drawing_type: Type of drawing (Architectural, Electrical, etc.)
+        client: OpenAI client
+        file_name: Optional name of the file being processed
+
+    Returns:
+        Structured JSON as a string
+
+    Raises:
+        ValueError: If the content is empty or too large for processing
+        JSONDecodeError: If the response is not valid JSON
+        Exception: For other processing errors
+    """
+    if not raw_content:
+        logging.warning(f"Empty content received for {file_name}. Cannot process.")
+        raise ValueError("Cannot process empty content")
+
+    # Log details about processing task
+    content_length = len(raw_content)
+    drawing_type = drawing_type or "Unknown"
+    file_name = file_name or "Unknown"
+
+    logging.info(f"Starting drawing processing: Type={drawing_type}, File={file_name}, Content length={content_length}")
+
+    try:
+        # Detect more specific drawing subtype
+        subtype = detect_drawing_subtype(drawing_type, file_name)
+        logging.info(f"Detected drawing subtype: {subtype}")
+
+        # Create the AI service
+        ai_service = DrawingAiService(client, DRAWING_INSTRUCTIONS)
+
+        # Get optimized parameters for this drawing
+        params = optimize_model_parameters(subtype, raw_content, file_name)
+
+        # --- REMOVED call to get_example_output ---
+
+        # Check if this is a specification document
+        is_specification = "SPECIFICATION" in file_name.upper() or drawing_type.upper() == "SPECIFICATIONS"
+
+        # Determine the appropriate system message based on detected subtype/type
+        if is_specification:
+            # Simplified system message retrieval for specifications
+            system_message = ai_service._get_default_system_message(DrawingCategory.SPECIFICATIONS.value)
+            logging.info("Using specification-specific system prompt.")
+        else:
+            # Get the appropriate system message based on detected subtype
+            system_message = ai_service._get_default_system_message(subtype)
+            logging.info(f"Using system prompt for subtype: {subtype}")
+
+
+        # Process the drawing using the simplified prompt method
+        try:
+            response_str = await ai_service.process_with_prompt(
+                raw_content=raw_content,
+                temperature=params["temperature"],
+                max_tokens=params["max_tokens"],
+                model_type=params["model_type"],
+                system_message=system_message,
+                # --- REMOVED example_output parameter ---
+            )
+
+            # Basic validation check after receiving the string
+            try:
+                json.loads(response_str) # Try parsing to ensure it's valid JSON
+                logging.info(f"Successfully processed {subtype} drawing ({len(response_str)} chars output)")
+                return response_str
+            except json.JSONDecodeError as json_err:
+                 logging.error(f"Invalid JSON response from AI service for {file_name}: {json_err}")
+                 logging.error(f"Raw response snippet: {response_str[:500]}...")
+                 raise # Re-raise the JSON error
+
+        except ValueError as val_err: # Catch context length errors from process_with_prompt
+            logging.error(f"Value error processing {file_name}: {val_err}")
+            raise # Re-raise the value error
+        except Exception as proc_err: # Catch other API/processing errors
+            logging.error(f"Error during AI processing call for {file_name}: {proc_err}")
+            raise # Re-raise other errors
+
+
+    except Exception as e:
+        logging.error(f"Unexpected error setting up processing for {drawing_type} drawing '{file_name}': {str(e)}")
+        raise # Re-raise any setup errors
+
+# --- REMOVED process_drawing_with_examples function ---
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/panel_schedule_processor.py
+```py
+import os
+import json
+import logging
+from typing import Dict, Any, List, Optional
+from tqdm.asyncio import tqdm
+
+from services.extraction_service import PyMuPdfExtractor, ExtractionResult
+from services.storage_service import FileSystemStorage
+from services.ai_service import DrawingAiService, AiRequest, ModelType, optimize_model_parameters
+
+# If you have a performance decorator, you can add it here if desired
+# from utils.performance_utils import time_operation
+
+def split_text_into_chunks(text: str, chunk_size: int = None) -> List[str]:
+    """
+    Returns the full text as a single chunk with no splitting.
+    
+    Args:
+        text: The text to process
+        chunk_size: Ignored parameter (kept for backwards compatibility)
+        
+    Returns:
+        List with a single item containing the full text
+    """
+    return [text]
+
+def normalize_panel_data_fields(panel_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Enhanced normalization with expanded synonym mappings:
+    - 'description', 'loadType', 'load type', 'item', 'equipment' => 'load_name'
+    - 'ocp', 'amperage', 'breaker_size', 'amps', 'size' => 'trip'
+    - 'circuit_no', 'circuit_number', 'ckt', 'circuit no', 'no' => 'circuit'
+    - And other common electrical synonyms
+    """
+    circuits = panel_data.get("circuits", [])
+    new_circuits = []
+
+    for cdict in circuits:
+        c = dict(cdict)
+        # load_name synonyms
+        if "description" in c and "load_name" not in c:
+            c["load_name"] = c.pop("description")
+        if "loadType" in c and "load_name" not in c:
+            c["load_name"] = c.pop("loadType")
+        if "load type" in c and "load_name" not in c:
+            c["load_name"] = c.pop("load type")
+        if "item" in c and "load_name" not in c:
+            c["load_name"] = c.pop("item")
+        if "equipment" in c and "load_name" not in c:
+            c["load_name"] = c.pop("equipment")
+
+        # trip synonyms
+        if "ocp" in c and "trip" not in c:
+            c["trip"] = c.pop("ocp")
+        if "breaker_size" in c and "trip" not in c:
+            c["trip"] = c.pop("breaker_size")
+        if "amperage" in c and "trip" not in c:
+            c["trip"] = c.pop("amperage")
+        if "amp" in c and "trip" not in c:
+            c["trip"] = c.pop("amp")
+        if "amps" in c and "trip" not in c:
+            c["trip"] = c.pop("amps")
+        if "size" in c and "trip" not in c:
+            c["trip"] = c.pop("size")
+
+        # circuit synonyms
+        if "circuit_no" in c and "circuit" not in c:
+            c["circuit"] = c.pop("circuit_no")
+        if "circuit_number" in c and "circuit" not in c:
+            c["circuit"] = c.pop("circuit_number")
+        if "ckt" in c and "circuit" not in c:
+            c["circuit"] = c.pop("ckt")
+        if "circuit no" in c and "circuit" not in c:
+            c["circuit"] = c.pop("circuit no")
+        if "no" in c and "circuit" not in c:
+            c["circuit"] = c.pop("no")
+
+        new_circuits.append(c)
+
+    panel_data["circuits"] = new_circuits
+    return panel_data
+
+async def process_panel_schedule_content_async(
+    extraction_result: ExtractionResult,
+    client,
+    file_name: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Process panel schedule content from an extraction result.
+    
+    Args:
+        extraction_result: Result of PDF extraction containing text and tables
+        client: OpenAI client
+        file_name: Name of the file (for logging purposes)
+        
+    Returns:
+        Processed panel data dictionary or None if processing failed
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(f"Processing panel schedule content for {file_name}")
+
+    try:
+        tables = extraction_result.tables
+        raw_text = extraction_result.raw_text
+
+        if tables:
+            logger.info(f"Found {len(tables)} table(s). Using table-based parsing for {file_name}.")
+            panels_data = await _parse_tables_without_chunking(tables, client, logger)
+        else:
+            logger.warning(f"No tables found in {file_name}—fallback to raw text approach.")
+            panels_data = await _fallback_raw_text(raw_text, client, logger)
+
+        if not panels_data:
+            logger.warning(f"No panel data extracted from {file_name}.")
+            return None
+
+        # Return the first panel if there's only one, otherwise return the array
+        if len(panels_data) == 1:
+            return normalize_panel_data_fields(panels_data[0])
+        else:
+            # For multiple panels, create a parent object
+            result = {
+                "panels": [normalize_panel_data_fields(panel) for panel in panels_data]
+            }
+            return result
+
+    except Exception as ex:
+        logger.error(f"Unhandled error processing panel schedule content for {file_name}: {str(ex)}")
+        return None
+
+async def process_panel_schedule_pdf_async(
+    pdf_path: str,
+    client,
+    output_folder: str,
+    drawing_type: str
+) -> Dict[str, Any]:
+    """
+    Specialized function for panel schedules:
+    1) Extract with PyMuPDF
+    2) If any tables found, parse them chunk-by-chunk
+    3) If no tables, fallback to raw text chunking
+    4) Merge partial results & synonyms
+    5) Save final JSON to output_folder/drawing_type
+    """
+    logger = logging.getLogger(__name__)
+    file_name = os.path.basename(pdf_path)
+
+    extractor = PyMuPdfExtractor(logger=logger)
+    storage = FileSystemStorage(logger=logger)
+
+    with tqdm(total=100, desc=f"[PanelSchedules] {file_name}", leave=False) as pbar:
+        try:
+            extraction_result = await extractor.extract(pdf_path)
+            pbar.update(10)
+            if not extraction_result.success:
+                err = f"Extraction failed: {extraction_result.error}"
+                logger.error(err)
+                return {"success": False, "error": err, "file": pdf_path}
+
+            # Process the content
+            panels_data = await process_panel_schedule_content_async(
+                extraction_result=extraction_result,
+                client=client,
+                file_name=file_name
+            )
+            
+            pbar.update(60)
+            if not panels_data:
+                logger.warning(f"No panel data extracted from {file_name}.")
+                return {"success": True, "file": pdf_path, "panel_schedule": True, "data": []}
+
+            # Now we place the final JSON in output_folder/drawing_type
+            type_folder = os.path.join(output_folder, drawing_type)
+            os.makedirs(type_folder, exist_ok=True)
+
+            base_name = os.path.splitext(file_name)[0]
+            output_filename = f"{base_name}_panel_schedules.json"
+            output_path = os.path.join(type_folder, output_filename)
+
+            await storage.save_json(panels_data, output_path)
+            pbar.update(30)
+
+            logger.info(f"Saved panel schedules to {output_path}")
+            pbar.update(10)
+
+            return {
+                "success": True,
+                "file": output_path,
+                "panel_schedule": True,
+                "data": panels_data
+            }
+
+        except Exception as ex:
+            pbar.update(100)
+            logger.error(f"Unhandled error processing panel schedule {pdf_path}: {str(ex)}")
+            return {"success": False, "error": str(ex), "file": pdf_path}
+
+async def _parse_tables_without_chunking(tables: List[Dict[str, Any]], client, logger: logging.Logger) -> List[Dict[str, Any]]:
+    """
+    Process all tables as a single unit - no chunking.
+    Returns a list of panel objects.
+    """
+    from services.ai_service import AiRequest, DrawingAiService
+    
+    ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
+    all_panels = []
+
+    # Combine all tables into a single content block
+    combined_tables = "\n\n".join([tbl_info["content"] for tbl_info in tables if tbl_info["content"].strip()])
+    
+    if not combined_tables.strip():
+        logger.debug("No valid table content found.")
+        return []
+    
+    system_prompt = """
+You are an advanced electrical-engineering assistant. I'm giving you tables from a panel schedule in Markdown form.
+Analyze all tables as a complete set to identify:
+1. Panel metadata (name, voltage, phases, location, etc.)
+2. Complete circuit information
+3. Any notes or additional specifications
+
+Return valid JSON with:
+{
+  "panel_name": "...",
+  "panel_metadata": { ... all available metadata ... },
+  "circuits": [
+    { "circuit": "...", "load_name": "...", "trip": "...", "poles": "...", ... }
+  ]
+}
+CRITICAL: Ensure ALL property names (keys) in the JSON output are enclosed in double quotes.
+Ensure ALL circuits are documented EXACTLY as shown. Missing or incomplete information can cause dangerous installation errors.
+    """.strip()
+
+    # Process the entire set of tables as a single unit
+    user_text = f"FULL PANEL SCHEDULE TABLES:\n{combined_tables}"
+
+    # Determine model type for table-based processing - Using GPT_4O_MINI as default
+    selected_model_type = ModelType.GPT_4O_MINI
+    logger.info(f"Using default model {selected_model_type.value} for panel schedule table processing.")
+
+    request = AiRequest(
+        content=user_text,
+        model_type=selected_model_type,  # Use the determined model type
+        temperature=0.05,  # Use lowest temperature for precision
+        max_tokens=4000,
+        system_message=system_prompt
+    )
+
+    response = await ai_service.process(request)
+    if not response.success or not response.content:
+        logger.warning(f"GPT parse error on combined tables: {response.error}")
+        return []
+
+    try:
+        panel_json = json.loads(response.content)
+        # Normalize synonyms
+        panel_json = normalize_panel_data_fields(panel_json)
+        # If we found circuits or a panel name, add it
+        if panel_json.get("panel_name") or panel_json.get("circuits"):
+            all_panels.append(panel_json)
+        
+        return all_panels
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error on combined tables: {str(e)}")
+        logger.error(f"Raw problematic content: {response.content[:500]}...")
+        return []
+
+async def _fallback_raw_text(raw_text: str, client, logger: logging.Logger) -> List[Dict[str, Any]]:
+    """
+    If no tables found, process the entire raw_text as a single unit.
+    Return a list of one or more panels if discovered.
+    """
+    from services.ai_service import AiRequest, DrawingAiService
+
+    ai_service = DrawingAiService(client, drawing_instructions={}, logger=logger)
+
+    fallback_prompt = """
+You are an expert electrical engineer analyzing panel schedules. The content below represents a panel schedule 
+with potentially unclear formatting. Your goal is to produce a precisely structured JSON representation.
+
+Extract and structure:
+1. Panel metadata (name, voltage, phases, location, etc.) in a 'panel_metadata' object
+2. ALL circuit information in a 'circuits' array with EACH circuit having:
+   - 'circuit': Circuit number EXACTLY as shown
+   - 'trip': Breaker/trip size with units
+   - 'poles': Number of poles (1, 2, or 3)
+   - 'load_name': Complete description of connected load
+   - Any additional circuit information present
+
+Return a valid JSON object with:
+{
+  "panel_name": "Panel ID exactly as shown",
+  "panel_metadata": { ... all available metadata ... },
+  "circuits": [
+    { "circuit": "1", "load_name": "Receptacles Room 101", "trip": "20A", ... },
+    ...
+  ]
+}
+
+CRITICAL: Ensure ALL property names (keys) in the JSON output are enclosed in double quotes.
+CRITICAL: Missing circuits or incorrect information can lead to dangerous installation errors.
+    """.strip()
+    
+    # Determine model type for fallback - Using GPT_4O_MINI as default
+    # Alternatively, could call optimize_model_parameters here if needed,
+    # but a default is simpler for the fallback path.
+    selected_model_type = ModelType.GPT_4O_MINI
+    logger.info(f"Using default model {selected_model_type.value} for panel schedule fallback.")
+    
+    request = AiRequest(
+        content=raw_text,
+        model_type=selected_model_type, # Use the determined model type
+        temperature=0.05,  # Use lowest temperature for precision
+        max_tokens=4000,
+        system_message=fallback_prompt
+    )
+    
+    response = await ai_service.process(request)
+    if not response.success or not response.content:
+        logger.warning(f"GPT parse error on raw text: {response.error}")
+        return []
+    
+    try:
+        panel_json = json.loads(response.content)
+        # Normalize fields
+        panel_json = normalize_panel_data_fields(panel_json)
+        # If we found circuits or a panel name, add it
+        all_panels = []
+        if panel_json.get("panel_name") or panel_json.get("circuits"):
+            all_panels.append(panel_json)
+        
+        return all_panels
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error on raw text: {str(e)}")
+        logger.error(f"Raw problematic content: {response.content[:500]}...")
+        return []
+
+```
+
+File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/base_templates.py
+```py
+"""
+Base prompt templates to reduce duplication across specific drawing types.
+"""
+
+BASE_DRAWING_TEMPLATE = """
+You are extracting information from a {drawing_type} drawing.
+Document ALL elements following this general structure, adapting to project-specific terminology.
+
+EXTRACTION PRIORITIES:
+1. Identify and extract ALL {element_type} elements
+2. Document specifications EXACTLY as shown for each element
+3. Preserve ALL notes, reference numbers, and special requirements
+
+{specific_instructions}
+
+EXAMPLE STRUCTURE (adapt based on what you find in the drawing):
+{example_structure}
+
+CRITICAL INSTRUCTIONS:
+1. CAPTURE everything in the drawing
+2. PRESERVE original terminology and organization
+3. GROUP similar elements together in logical sections
+4. DOCUMENT all specifications and detailed information
+5. Ensure your entire response is a single, valid JSON object.
+
+{industry_context}
+"""
+
+SCHEDULE_TEMPLATE = """
+You are extracting {schedule_type} information from {drawing_category} drawings. 
+Document ALL {item_type} following the structure in this example, while adapting to project-specific terminology.
+
+EXTRACTION PRIORITIES:
+1. Capture EVERY {item_type} with ALL specifications
+2. Document ALL {key_properties} EXACTLY as shown
+3. Include ALL notes, requirements, and special conditions
+
+EXAMPLE OUTPUT STRUCTURE (field names may vary by project):
+{example_structure}
+
+CRITICAL INSTRUCTIONS:
+1. EXTRACT all {item_type}s shown on the {source_location}
+2. PRESERVE exact {preservation_focus}
+3. INCLUDE all technical specifications and requirements 
+4. ADAPT the structure to match this specific drawing
+5. MAINTAIN the overall hierarchical organization shown in the example
+6. Format your output as a complete, valid JSON object.
+
+{stake_holders} rely on this information for {use_case}.
+Complete accuracy is essential for {critical_purpose}.
+"""
+
+def create_general_template(drawing_type, element_type, instructions, example, context):
+    """Create a general prompt template with the provided parameters."""
+    return BASE_DRAWING_TEMPLATE.format(
+        drawing_type=drawing_type,
+        element_type=element_type,
+        specific_instructions=instructions,
+        example_structure=example,
+        industry_context=context
+    )
+
+def create_schedule_template(
+    schedule_type, 
+    drawing_category,
+    item_type,
+    key_properties,
+    example_structure,
+    source_location,
+    preservation_focus,
+    stake_holders,
+    use_case,
+    critical_purpose
+):
+    """Create a schedule template with the provided parameters."""
+    return SCHEDULE_TEMPLATE.format(
+        schedule_type=schedule_type,
+        drawing_category=drawing_category,
+        item_type=item_type,
+        key_properties=key_properties,
+        example_structure=example_structure,
+        source_location=source_location,
+        preservation_focus=preservation_focus,
+        stake_holders=stake_holders,
+        use_case=use_case,
+        critical_purpose=critical_purpose
+    )
+
+```
+
 File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompts/plumbing.py
 ```py
 """
@@ -4187,29 +4486,102 @@ def default_plumbing_prompt():
         drawing_type="PLUMBING",
         element_type="plumbing",
         instructions="""
-Focus on identifying and extracting ALL plumbing elements (fixtures, equipment, piping, etc.) with their specifications.
+Focus on identifying and extracting ALL plumbing elements with a comprehensive structure that includes:
+
+1. Complete fixture schedules with every fixture type (sinks, water closets, urinals, lavatories, drains, cleanouts, etc.)
+2. All equipment (water heaters, pumps, mixing valves, shock absorbers, etc.)
+3. Pipe materials and connection requirements
+4. All general notes, insulation notes, and special requirements
+5. Capture each distinct schedule as a separate section with appropriate field structure
+
+Pay special attention to equipment like pumps (CP), mixing valves (TM), and shock absorbers (SA) which must be captured even if located in separate tables or areas of the drawing.
 """,
         example="""
 {
   "PLUMBING": {
     "metadata": {
-      "drawing_number": "P101",
-      "title": "PLUMBING PLAN",
+      "drawing_number": "P601",
+      "title": "PLUMBING SCHEDULES",
       "date": "2023-05-15",
       "revision": "2"
     },
-    "fixtures": [],
-    "equipment": [],
-    "piping": {
-      "domestic_water": [],
-      "waste": [],
-      "vent": []
+    "FIXTURE": [
+      {
+        "fixture_id": "S1",
+        "description": "SINGLE COMPARTMENT SINK",
+        "manufacturer": "McGuire Supplies",
+        "model": "N/A",
+        "mounting": "Contractor installed",
+        "type": "17 gauge brass P-trap",
+        "connections": {
+          "cold_water": "1/2 inch",
+          "waste": "2 inch",
+          "vent": "2 inch",
+          "hot_water": "1/2 inch"
+        },
+        "notes": "Contractor installed"
+      }
+    ],
+    "WATER_HEATER": [
+      {
+        "mark": "WH-1",
+        "location": "Mechanical Room",
+        "manufacturer": "A.O. Smith",
+        "model": "DRE-120-24",
+        "specifications": {
+          "storage_gallons": "120",
+          "operating_water_temp": "140°F",
+          "recovery_rate": "99 GPH"
+        },
+        "mounting": "Floor mounted",
+        "notes": ["Provide T&P relief valve"]
+      }
+    ],
+    "PUMP": [
+      {
+        "mark": "CP",
+        "location": "Mechanical Room",
+        "serves": "Hot Water Recirculation",
+        "type": "IN-LINE",
+        "gpm": "10",
+        "tdh_ft": "20",
+        "hp": "1/2",
+        "electrical": "120V/1PH/60HZ",
+        "manufacturer": "Bell & Gossett",
+        "model": "Series 100"
+      }
+    ],
+    "MIXING_VALVE": [
+      {
+        "designation": "TM",
+        "location": "Mechanical Room",
+        "manufacturer": "Powers",
+        "model": "LFLM495-1",
+        "notes": "Master thermostatic mixing valve"
+      }
+    ],
+    "SHOCK_ABSORBER": [
+      {
+        "mark": "SA-A",
+        "fixture_units": "1-11",
+        "manufacturer": "Sioux Chief",
+        "model": "660-A"
+      }
+    ],
+    "MATERIAL_LEGEND": {
+      "SANITARY SEWER PIPING": "CAST IRON OR SCHEDULE 40 PVC",
+      "DOMESTIC WATER PIPING": "TYPE L COPPER"
     },
-    "notes": []
+    "GENERAL_NOTES": [
+      "A. All fixtures shall be installed per manufacturer's recommendations."
+    ],
+    "INSULATION_NOTES": [
+      "A. Insulate all domestic hot water piping with 1\" thick fiberglass insulation."
+    ]
   }
 }
 """,
-        context="Plumbing engineers and contractors rely on this information for proper system design, coordination, and installation."
+        context="Plumbing engineers and contractors rely on ALL schedules, notes, and specifications for proper system design, coordination, and installation. Missing information can lead to serious installation issues or code violations."
     )
 
 @register_prompt("Plumbing", "FIXTURE")
@@ -4218,40 +4590,139 @@ def fixture_schedule_prompt():
     return create_schedule_template(
         schedule_type="fixture",
         drawing_category="plumbing",
-        item_type="plumbing fixture",
-        key_properties="model numbers, connection sizes, and flow rates",
+        item_type="plumbing fixture and equipment",
+        key_properties="identifiers, models, specifications, connections, notes and all related schedules",
         example_structure="""
 {
   "PLUMBING": {
-    "FIXTURE": {
-      "fixture_id": "P-1",
-      "description": "WATER CLOSET",
-      "manufacturer": "American Standard",
-      "model": "2234.001",
-      "mounting": "Floor mounted",
-      "type": "1.28 GPF, elongated bowl",
-      "connections": {
-        "cold_water": "1/2 inch",
-        "waste": "4 inch"
+    "metadata": {
+      "drawing_number": "P601",
+      "title": "PLUMBING SCHEDULES",
+      "date": "2023-05-15",
+      "revision": "2"
+    },
+    "FIXTURE": [
+      {
+        "fixture_id": "S1",
+        "description": "SINGLE COMPARTMENT SINK",
+        "manufacturer": "McGuire Supplies",
+        "model": "N/A",
+        "mounting": "Contractor installed",
+        "type": "17 gauge brass P-trap",
+        "connections": {
+          "cold_water": "1/2 inch",
+          "waste": "2 inch",
+          "vent": "2 inch",
+          "hot_water": "1/2 inch"
+        },
+        "location": "Refer to architect for specification",
+        "notes": "Contractor installed"
       },
-      "accessories": [
-        "Toilet seat: Church 9500NSSC",
-        "Carrier: Josam 12674",
-        "Flush valve: Sloan Royal 111-1.28"
-      ],
-      "ada_compliant": true,
-      "location": "Restrooms 101, 102, 103",
-      "rough_in_height": "15 inches to rim",
-      "notes": "Provide floor flange and wax ring"
-    }
+      {
+        "fixture_id": "SW-01",
+        "description": "WATER CLOSET",
+        "manufacturer": "American Standard",
+        "model": "2234.001",
+        "mounting": "Floor mounted",
+        "type": "1.28 GPF, elongated bowl",
+        "connections": {
+          "cold_water": "1/2 inch",
+          "waste": "4 inch",
+          "vent": "2 inch"
+        },
+        "location": "Various",
+        "notes": "Provide floor flange and wax ring"
+      }
+    ],
+    "WATER_HEATER": [
+      {
+        "mark": "WH-1",
+        "location": "Mechanical Room",
+        "manufacturer": "A.O. Smith",
+        "model": "DRE-120-24",
+        "specifications": {
+          "storage_gallons": "120",
+          "operating_water_temp": "140°F",
+          "tank_dimensions": "26\" DIA x 71\" H",
+          "recovery_rate": "99 GPH at 100°F rise",
+          "electric_power": "480V, 3PH, 60HZ",
+          "kW_input": "24"
+        },
+        "mounting": "Floor mounted",
+        "notes": [
+          "Provide T&P relief valve",
+          "Provide seismic restraints per detail P5.1",
+          "Provide expansion tank"
+        ]
+      }
+    ],
+    "PUMP": [
+      {
+        "mark": "CP",
+        "location": "Mechanical Room",
+        "serves": "Hot Water Recirculation",
+        "type": "IN-LINE",
+        "gpm": "10",
+        "tdh_ft": "20",
+        "hp": "1/2",
+        "rpm": "1750",
+        "electrical": "120V/1PH/60HZ",
+        "manufacturer": "Bell & Gossett",
+        "model": "Series 100",
+        "notes": "Provide spring isolation hangers"
+      }
+    ],
+    "MIXING_VALVE": [
+      {
+        "designation": "TM",
+        "location": "Mechanical Room",
+        "inlet_temp_F": "140",
+        "outlet_temp_F": "120",
+        "pressure_drop_psi": "5",
+        "manufacturer": "Powers",
+        "model": "LFLM495-1",
+        "notes": "Master thermostatic mixing valve for domestic hot water system"
+      }
+    ],
+    "SHOCK_ABSORBER": [
+      {
+        "mark": "SA-A",
+        "fixture_units": "1-11",
+        "manufacturer": "Sioux Chief",
+        "model": "660-A",
+        "description": "Water hammer arrestor, size A"
+      },
+      {
+        "mark": "SA-B",
+        "fixture_units": "12-32",
+        "manufacturer": "Sioux Chief",
+        "model": "660-B",
+        "description": "Water hammer arrestor, size B"
+      }
+    ],
+    "MATERIAL_LEGEND": {
+      "SANITARY SEWER PIPING": "CAST IRON OR SCHEDULE 40 PVC",
+      "VENT PIPING": "CAST IRON OR SCHEDULE 40 PVC",
+      "DOMESTIC WATER PIPING": "TYPE L COPPER",
+      "STORM DRAIN PIPING": "CAST IRON OR SCHEDULE 40 PVC"
+    },
+    "GENERAL_NOTES": [
+      "A. All fixtures and equipment shall be installed per manufacturer's recommendations.",
+      "B. Verify all rough-in dimensions with architectural drawings and manufacturer's cut sheets.",
+      "C. All hot and cold water piping to be insulated per specifications."
+    ],
+    "INSULATION_NOTES": [
+      "A. Insulate all domestic hot water piping with 1\" thick fiberglass insulation.",
+      "B. Insulate all domestic cold water piping with 1/2\" thick fiberglass insulation."
+    ]
   }
 }
 """,
         source_location="schedule",
-        preservation_focus="fixture types, models, and connection requirements",
+        preservation_focus="ALL fixture types, equipment, pumps, valves, shock absorbers, materials, and notes",
         stake_holders="Plumbing engineers and contractors",
-        use_case="fixture selection and installation coordination",
-        critical_purpose="proper fixture function and water conservation"
+        use_case="comprehensive fixture and equipment selection and installation coordination",
+        critical_purpose="proper system function, water conservation, and code compliance"
     )
 
 @register_prompt("Plumbing", "EQUIPMENT")
@@ -4369,428 +4840,6 @@ PLUMBING_PROMPTS = {
     "EQUIPMENT": equipment_schedule_prompt(),
     "PIPE": pipe_schedule_prompt()
 }
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/__init__.py
-```py
-# Processing package initialization
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/processing/__init__.py
-```py
-# Processing package initialization
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/a_rooms_template.json
-```json
-{
-    "room_id": "",
-    "room_name": "",
-    "walls": {
-      "north": "",
-      "south": "",
-      "east": "",
-      "west": ""
-    },
-    "ceiling_height": "",
-    "dimensions": ""
-}
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/base_templates.py
-```py
-"""
-Base prompt templates to reduce duplication across specific drawing types.
-"""
-
-BASE_DRAWING_TEMPLATE = """
-You are extracting information from a {drawing_type} drawing.
-Document ALL elements following this general structure, adapting to project-specific terminology.
-
-EXTRACTION PRIORITIES:
-1. Identify and extract ALL {element_type} elements
-2. Document specifications EXACTLY as shown for each element
-3. Preserve ALL notes, reference numbers, and special requirements
-
-{specific_instructions}
-
-EXAMPLE STRUCTURE (adapt based on what you find in the drawing):
-{example_structure}
-
-CRITICAL INSTRUCTIONS:
-1. CAPTURE everything in the drawing
-2. PRESERVE original terminology and organization
-3. GROUP similar elements together in logical sections
-4. DOCUMENT all specifications and detailed information
-
-{industry_context}
-"""
-
-SCHEDULE_TEMPLATE = """
-You are extracting {schedule_type} information from {drawing_category} drawings. 
-Document ALL {item_type} following the structure in this example, while adapting to project-specific terminology.
-
-EXTRACTION PRIORITIES:
-1. Capture EVERY {item_type} with ALL specifications
-2. Document ALL {key_properties} EXACTLY as shown
-3. Include ALL notes, requirements, and special conditions
-
-EXAMPLE OUTPUT STRUCTURE (field names may vary by project):
-{example_structure}
-
-CRITICAL INSTRUCTIONS:
-1. EXTRACT all {item_type}s shown on the {source_location}
-2. PRESERVE exact {preservation_focus}
-3. INCLUDE all technical specifications and requirements 
-4. ADAPT the structure to match this specific drawing
-5. MAINTAIN the overall hierarchical organization shown in the example
-
-{stake_holders} rely on this information for {use_case}.
-Complete accuracy is essential for {critical_purpose}.
-"""
-
-def create_general_template(drawing_type, element_type, instructions, example, context):
-    """Create a general prompt template with the provided parameters."""
-    return BASE_DRAWING_TEMPLATE.format(
-        drawing_type=drawing_type,
-        element_type=element_type,
-        specific_instructions=instructions,
-        example_structure=example,
-        industry_context=context
-    )
-
-def create_schedule_template(
-    schedule_type, 
-    drawing_category,
-    item_type,
-    key_properties,
-    example_structure,
-    source_location,
-    preservation_focus,
-    stake_holders,
-    use_case,
-    critical_purpose
-):
-    """Create a schedule prompt template with the provided parameters."""
-    return SCHEDULE_TEMPLATE.format(
-        schedule_type=schedule_type,
-        drawing_category=drawing_category,
-        item_type=item_type,
-        key_properties=key_properties,
-        example_structure=example_structure,
-        source_location=source_location,
-        preservation_focus=preservation_focus,
-        stake_holders=stake_holders,
-        use_case=use_case,
-        critical_purpose=critical_purpose
-    )
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompt_registry.py
-```py
-"""
-Registry system for managing prompt templates.
-"""
-from typing import Dict, Callable, Optional
-
-# Define prompt registry as a dictionary of factories
-PROMPT_REGISTRY: Dict[str, Callable[[], str]] = {}
-
-def register_prompt(category: str, subtype: Optional[str] = None):
-    """
-    Decorator to register a prompt factory function.
-    
-    Args:
-        category: Drawing category (e.g., "Electrical")
-        subtype: Drawing subtype (e.g., "PanelSchedule")
-        
-    Returns:
-        Decorator function that registers the decorated function
-    """
-    key = f"{category}_{subtype}" if subtype else category
-    
-    def decorator(func: Callable[[], str]):
-        PROMPT_REGISTRY[key.upper()] = func
-        return func
-    
-    return decorator
-
-def get_registered_prompt(drawing_type: str) -> str:
-    """
-    Get prompt using registry with fallbacks.
-    
-    Args:
-        drawing_type: Type of drawing (e.g., "Electrical_PanelSchedule")
-        
-    Returns:
-        Prompt template string
-    """
-    # Handle case where drawing_type is None
-    if not drawing_type:
-        return PROMPT_REGISTRY.get("GENERAL", lambda: "")()
-        
-    # Normalize the key
-    key = drawing_type.upper().replace(" ", "_")
-    
-    # Try exact match first
-    if key in PROMPT_REGISTRY:
-        return PROMPT_REGISTRY[key]()
-    
-    # Try main category
-    main_type = key.split("_")[0]
-    if main_type in PROMPT_REGISTRY:
-        return PROMPT_REGISTRY[main_type]()
-    
-    # Fall back to general
-    return PROMPT_REGISTRY.get("GENERAL", lambda: "")()
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/e_rooms_template.json
-```json
-{
-    "room_id": "",
-    "room_name": "",
-    "circuits": {
-        "lighting": [],
-        "power": []
-    },
-    "light_fixtures": {
-        "fixture_ids": [],
-        "fixture_count": {}
-    },
-    "outlets": {
-        "regular_outlets": 0,
-        "controlled_outlets": 0
-    },
-    "data": 0,
-    "floor_boxes": 0,
-    "mechanical_equipment": [],
-    "switches": {
-        "type": "",
-        "model": "",
-        "dimming": ""
-    }
-} 
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompt_templates.py
-```py
-"""
-Main interface module for accessing prompt templates.
-"""
-
-from typing import Dict, Optional
-
-# Import prompt dictionaries from each category
-from templates.prompts.architectural import ARCHITECTURAL_PROMPTS
-from templates.prompts.electrical import ELECTRICAL_PROMPTS
-from templates.prompts.mechanical import MECHANICAL_PROMPTS
-from templates.prompts.plumbing import PLUMBING_PROMPTS
-from templates.prompts.general import GENERAL_PROMPT
-
-# Import registry for more flexible prompt retrieval
-from templates.prompt_registry import get_registered_prompt
-
-# Mapping of main drawing types to prompt dictionaries (for backward compatibility)
-PROMPT_CATEGORIES = {
-    "Architectural": ARCHITECTURAL_PROMPTS,
-    "Electrical": ELECTRICAL_PROMPTS, 
-    "Mechanical": MECHANICAL_PROMPTS,
-    "Plumbing": PLUMBING_PROMPTS
-}
-
-def get_prompt_template(drawing_type: str) -> str:
-    """
-    Get the appropriate prompt template based on drawing type.
-    
-    Args:
-        drawing_type: Type of drawing (e.g., "Architectural", "Electrical_PanelSchedule")
-        
-    Returns:
-        Prompt template string appropriate for the drawing type
-    """
-    # Default to general prompt if no drawing type provided
-    if not drawing_type:
-        return GENERAL_PROMPT
-    
-    # Try to get prompt from registry first (preferred method)
-    registered_prompt = get_registered_prompt(drawing_type)
-    if registered_prompt:
-        return registered_prompt
-    
-    # Legacy fallback using dictionaries
-    # Parse drawing type to determine category and subtype
-    parts = drawing_type.split('_', 1)
-    main_type = parts[0]
-    
-    # If main type not recognized, return general prompt
-    if main_type not in PROMPT_CATEGORIES:
-        return GENERAL_PROMPT
-    
-    # Get prompt dictionary for this main type
-    prompt_dict = PROMPT_CATEGORIES[main_type]
-    
-    # Determine subtype (if any)
-    subtype = parts[1].upper() if len(parts) > 1 else "DEFAULT"
-    
-    # Return the specific subtype prompt if available, otherwise the default for this category
-    return prompt_dict.get(subtype, prompt_dict["DEFAULT"])
-
-def get_available_subtypes(main_type: Optional[str] = None) -> Dict[str, list]:
-    """
-    Get available subtypes for a main drawing type or all types.
-    
-    Args:
-        main_type: Optional main drawing type (e.g., "Architectural")
-        
-    Returns:
-        Dictionary of available subtypes by main type
-    """
-    if main_type and main_type in PROMPT_CATEGORIES:
-        # Return subtypes for specific main type
-        return {main_type: list(PROMPT_CATEGORIES[main_type].keys())}
-    
-    # Return all subtypes by main type
-    return {category: list(prompts.keys()) for category, prompts in PROMPT_CATEGORIES.items()}
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/room_templates.py
-```py
-import json
-import os
-
-def load_template(template_name):
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(current_dir, f"{template_name}_template.json")
-    try:
-        with open(template_path, 'r') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print(f"Template file not found: {template_path}")
-        return {}
-    except json.JSONDecodeError:
-        print(f"Error decoding JSON from file: {template_path}")
-        return {}
-
-def generate_rooms_data(parsed_data, room_type):
-    template = load_template(room_type)
-    
-    metadata = parsed_data.get('metadata', {})
-    
-    rooms_data = {
-        "metadata": metadata,
-        "project_name": metadata.get('project', ''),
-        "floor_number": '',
-        "rooms": []
-    }
-    
-    parsed_rooms = parsed_data.get('rooms', [])
-    
-    if not parsed_rooms:
-        print(f"No rooms found in parsed data for {room_type}.")
-        return rooms_data
-
-    for parsed_room in parsed_rooms:
-        room_number = str(parsed_room.get('number', ''))
-        room_name = parsed_room.get('name', '')
-        
-        if not room_number or not room_name:
-            print(f"Skipping room with incomplete data: {parsed_room}")
-            continue
-        
-        room_data = template.copy()
-        room_data['room_id'] = f"Room_{room_number}"
-        room_data['room_name'] = f"{room_name}_{room_number}"
-        
-        # Copy all fields from parsed_room to room_data
-        for key, value in parsed_room.items():
-            if key not in ['number', 'name']:
-                room_data[key] = value
-        
-        rooms_data['rooms'].append(room_data)
-    
-    return rooms_data
-
-def process_architectural_drawing(parsed_data, file_path, output_folder):
-    """
-    Process architectural drawing data (parsed JSON),
-    and generate both e_rooms and a_rooms JSON outputs.
-    """
-    is_reflected_ceiling = "REFLECTED CEILING PLAN" in file_path.upper()
-    
-    floor_number = ''  # If floor number is available in the future, extract it here
-    
-    e_rooms_data = generate_rooms_data(parsed_data, 'e_rooms')
-    a_rooms_data = generate_rooms_data(parsed_data, 'a_rooms')
-    
-    e_rooms_file = os.path.join(output_folder, f'e_rooms_details_floor_{floor_number}.json')
-    a_rooms_file = os.path.join(output_folder, f'a_rooms_details_floor_{floor_number}.json')
-    
-    with open(e_rooms_file, 'w') as f:
-        json.dump(e_rooms_data, f, indent=2)
-    with open(a_rooms_file, 'w') as f:
-        json.dump(a_rooms_data, f, indent=2)
-    
-    return {
-        "e_rooms_file": e_rooms_file,
-        "a_rooms_file": a_rooms_file,
-        "is_reflected_ceiling": is_reflected_ceiling
-    }
-
-```
-
-File: /Users/collin/Desktop/Ohmni/Projects/ohmni-oracle-template/templates/prompt_types.py
-```py
-from enum import Enum, auto
-
-class DrawingCategory(Enum):
-    """Main drawing categories."""
-    ARCHITECTURAL = "Architectural"
-    ELECTRICAL = "Electrical"
-    MECHANICAL = "Mechanical"
-    PLUMBING = "Plumbing"
-    GENERAL = "General"
-    SPECIFICATIONS = "Specifications"
-
-class ArchitecturalSubtype(Enum):
-    """Architectural drawing subtypes."""
-    ROOM = "ROOM"
-    CEILING = "CEILING"
-    WALL = "WALL"
-    DOOR = "DOOR"
-    DETAIL = "DETAIL"
-    DEFAULT = "DEFAULT"
-
-class ElectricalSubtype(Enum):
-    """Electrical drawing subtypes."""
-    PANEL_SCHEDULE = "PANEL_SCHEDULE"
-    LIGHTING = "LIGHTING"
-    POWER = "POWER"
-    FIREALARM = "FIREALARM"
-    TECHNOLOGY = "TECHNOLOGY"
-    SPEC = "SPEC"
-    DEFAULT = "DEFAULT"
-
-class MechanicalSubtype(Enum):
-    """Mechanical drawing subtypes."""
-    EQUIPMENT = "EQUIPMENT"
-    VENTILATION = "VENTILATION"
-    PIPING = "PIPING"
-    DEFAULT = "DEFAULT"
-
-class PlumbingSubtype(Enum):
-    """Plumbing drawing subtypes."""
-    FIXTURE = "FIXTURE"
-    EQUIPMENT = "EQUIPMENT"
-    PIPE = "PIPE"
-    DEFAULT = "DEFAULT"
 
 ```
 </file_contents>
